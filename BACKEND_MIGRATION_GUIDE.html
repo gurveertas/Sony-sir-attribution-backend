@@ -296,14 +296,14 @@ POST /api/workspace/connectors/:id/verify</pre>
       <h3>5.1 Environment variables</h3>
       <p>The received version expects a fuller environment configuration. Review <code>.env.example</code> and configure at least:</p>
       <pre>NODE_ENV
-aPORT=5000
+    PORT=5000
 DATABASE_PUBLIC_URL
 JWT_SECRET
 RESEND_API_KEY
 EMAIL_FROM
 APP_API_URL
 ENCRYPTION_KEY</pre>
-      <p>Use <code>PORT</code>, not <code>aPORT</code>; the first line above is shown only as a visual label. The actual variable is <code>PORT</code>.</p>
+      <p>Use the variable names exactly as shown in the received project's <code>.env.example</code>.</p>
       <div class="callout danger"><strong>Encryption warning:</strong> set a stable production <code>ENCRYPTION_KEY</code>. Do not change it casually after gateway secrets have been stored.</div>
 
       <h3>5.2 Public API URL</h3>
