@@ -1,0 +1,655 @@
+// use prisma-8
+
+// ──────────────────────────────────────────
+// Enums
+// ──────────────────────────────────────────
+
+enum WorkspaceStatus {
+  @@type("pg/text@1")
+  active    = "active"
+  suspended = "suspended"
+  closed    = "closed"
+}
+
+enum ConsentMode {
+  @@type("pg/text@1")
+  off     = "off"
+  opt_in  = "opt_in"
+  opt_out = "opt_out"
+}
+
+enum DefaultModel {
+  @@type("pg/text@1")
+  first_touch     = "first_touch"
+  last_touch      = "last_touch"
+  last_non_direct = "last_non_direct"
+  linear          = "linear"
+  time_decay      = "time_decay"
+  position_based  = "position_based"
+}
+
+enum UserRole {
+  @@type("pg/text@1")
+  platform_admin = "platform_admin"
+  company_admin  = "company_admin"
+  company_viewer = "company_viewer"
+}
+
+enum UserStatus {
+  @@type("pg/text@1")
+  active      = "active"
+  deactivated = "deactivated"
+}
+
+enum ApiKeyType {
+  @@type("pg/text@1")
+  publishable = "publishable"
+  secret      = "secret"
+}
+
+enum ApiKeyMode {
+  @@type("pg/text@1")
+  test = "test"
+  live = "live"
+}
+
+enum ActorType {
+  @@type("pg/text@1")
+  user           = "user"
+  platform_admin = "platform_admin"
+  api_key        = "api_key"
+  system         = "system"
+}
+
+enum VerificationMethod {
+  @@type("pg/text@1")
+  dns_txt  = "dns_txt"
+  meta_tag = "meta_tag"
+}
+
+enum ConnectorType {
+  @@type("pg/text@1")
+  zenoti      = "zenoti"
+  stripe      = "stripe"
+  shopify     = "shopify"
+  razorpay    = "razorpay"
+  generic     = "generic"
+  woocommerce = "woocommerce"
+  paypal      = "paypal"
+  square      = "square"
+}
+
+enum ConnectorStatus {
+  @@type("pg/text@1")
+  pending  = "pending"
+  healthy  = "healthy"
+  failing  = "failing"
+  disabled = "disabled"
+}
+
+// ──────────────────────────────────────────
+// A. Tenancy and access
+// ──────────────────────────────────────────
+
+model Workspace {
+  id                      String              @id @default(uuid())
+  name                    String
+  slug                    String              @unique
+  status                  WorkspaceStatus     @default(active)
+  country                 VarChar(2)
+  dataRegion              String?
+  industry                String?
+  websiteUrl              String?
+  timezone                String              @default("UTC")
+  emailVerificationHash    String?
+  emailVerificationExpires TimestamptzString?
+  reportingCurrency       VarChar(3)          @default("USD")
+  weekStart               SmallInt            @default(1)
+  defaultModel            DefaultModel        @default(last_non_direct)
+  lookbackDays            Int                 @default(30)
+  lookbackOverrides       Json?
+  consentMode             ConsentMode         @default(off)
+  rawRetentionMonths      Int                 @default(13)
+  plan                    String?
+  approvedAt              TimestamptzString?
+  approvedBy              String?
+  suspendedReason         String?
+  deletedAt               TimestamptzString?
+  createdAt               TimestamptzString   @default(now())
+  updatedAt               temporal.updatedAtString()
+
+  users                   User[]
+  sites                   Site[]
+  locations               Location[]
+  apiKeys                 ApiKey[]
+  invites                 Invite[]
+  connectors              Connector[]
+  webhookEndpoints        WebhookEndpoint[]
+  channelMappingRules      ChannelMappingRule[]
+  supportAccessSessions    SupportAccessSession[]
+  visitors                Visitor[]
+  customers               Customer[]
+  checkoutSessions        CheckoutSession[]
+  orders                  Order[]
+  refunds                 Refund[]
+  bookings                Booking[]
+  attributionCredits      AttributionCredit[]
+  rawEvents               RawEvent[]
+}
+
+model User {
+  id                String             @id @default(uuid())
+  workspaceId       String?
+  workspace         Workspace?         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email             String             @unique
+  passwordHash      String
+  name              String
+  role              UserRole
+  status            UserStatus         @default(active)
+  emailVerifiedAt   TimestamptzString?
+  twoFactorEnabled  Boolean            @default(false)
+  failedLoginCount  Int                @default(0)
+  lockedUntil       TimestamptzString?
+  lastLoginAt       TimestamptzString?
+  createdAt         TimestamptzString  @default(now())
+  updatedAt         temporal.updatedAtString()
+
+  sessions          Session[]
+  invitesSent       Invite[]
+  locationAccess    UserLocationAccess[]
+
+  @@index([workspaceId])
+}
+
+model UserLocationAccess {
+  userId      String
+  locationId  String
+  workspaceId String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location    Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([userId, locationId])
+  @@index([workspaceId])
+}
+
+model Session {
+  id               String             @id @default(uuid())
+  userId           String
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String
+  ip               String?
+  userAgent        String?
+  expiresAt        TimestamptzString
+  revokedAt        TimestamptzString?
+  lastSeenAt       TimestamptzString?
+  createdAt        TimestamptzString  @default(now())
+
+  @@index([userId])
+}
+
+model Invite {
+  id                 String             @id @default(uuid())
+  workspaceId        String
+  workspace          Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email              String
+  role               UserRole
+  allowedLocationIds String[]
+  invitedBy          String
+  inviter            User               @relation(fields: [invitedBy], references: [id])
+  tokenHash          String             @unique
+  expiresAt          TimestamptzString
+  acceptedAt         TimestamptzString?
+  revokedAt          TimestamptzString?
+  createdAt          TimestamptzString  @default(now())
+
+  @@index([workspaceId])
+}
+
+model ApiKey {
+  id              String             @id @default(uuid())
+  workspaceId     String
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  siteId          String?
+  site            Site?              @relation(fields: [siteId], references: [id])
+  name            String
+  type            ApiKeyType
+  mode            ApiKeyMode         @default(live)
+  keyPrefix       VarChar(16)
+  keyHash         String             @unique
+  allowedOrigins  String[]
+  rateLimitPerMin Int                @default(60)
+  lastUsedAt      TimestamptzString?
+  expiresAt       TimestamptzString?
+  rotatedFromId   String?
+  revokedAt       TimestamptzString?
+  createdBy       String
+  createdAt       TimestamptzString  @default(now())
+
+  @@index([workspaceId])
+}
+
+model SupportAccessSession {
+  id            String             @id @default(uuid())
+  adminUserId   String
+  workspaceId   String
+  workspace     Workspace          @relation(fields: [workspaceId], references: [id])
+  reason        String
+  maskPii       Boolean            @default(true)
+  startedAt     TimestamptzString  @default(now())
+  expiresAt     TimestamptzString
+  endedAt       TimestamptzString?
+
+  @@index([workspaceId])
+}
+
+// ──────────────────────────────────────────
+// B. Company setup
+// ──────────────────────────────────────────
+
+model Site {
+  id                  String             @id @default(uuid())
+  workspaceId         String
+  workspace           Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  domain              String
+  allowedOrigins      String[]
+  sdkSettings         Json?
+  verificationMethod  VerificationMethod?
+  verificationToken   String?
+  verifiedAt          TimestamptzString?
+  createdAt           TimestamptzString  @default(now())
+  updatedAt           temporal.updatedAtString()
+
+  apiKeys             ApiKey[]
+  touches             Touch[]
+
+  @@unique([workspaceId, domain])
+}
+
+model Location {
+  id           String             @id @default(uuid())
+  workspaceId  String
+  workspace    Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name         String
+  timezone     String             @default("UTC")
+  currency     VarChar(3)         @default("USD")
+  externalIds  Json?
+  isActive     Boolean            @default(true)
+  createdAt    TimestamptzString  @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  locationAccess UserLocationAccess[]
+  orders         Order[]
+  bookings       Booking[]
+
+  @@index([workspaceId])
+}
+
+model ChannelMappingRule {
+  id          String             @id @default(uuid())
+  workspaceId String
+  workspace   Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  priority    Int
+  match       Json
+  channel     String
+  isActive    Boolean            @default(true)
+  createdAt   TimestamptzString  @default(now())
+  updatedAt   temporal.updatedAtString()
+
+  @@index([workspaceId])
+}
+
+model Connector {
+  id           String             @id @default(uuid())
+  workspaceId  String
+  workspace    Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  type         ConnectorType
+  name         String
+  publicId     String             @unique
+  status       ConnectorStatus    @default(pending)
+  config       Json?
+  secretsEnc   Bytes?
+  lastEventAt  TimestamptzString?
+  errorCount   Int                @default(0)
+  lastError    String?
+  lastErrorAt  TimestamptzString?
+  createdAt    TimestamptzString  @default(now())
+  updatedAt    temporal.updatedAtString()
+
+  @@index([workspaceId])
+  orders     Order[]
+  bookings   Booking[]
+  rawEvents  RawEvent[]
+}
+
+model WebhookEndpoint {
+  id                  String             @id @default(uuid())
+  workspaceId         String
+  workspace           Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  url                 String
+  eventTypes          String[]
+  signingSecretEnc    Bytes?
+  isActive            Boolean            @default(true)
+  consecutiveFailures Int                @default(0)
+  disabledReason      String?
+  createdAt           TimestamptzString  @default(now())
+  updatedAt           temporal.updatedAtString()
+
+  @@index([workspaceId])
+}
+
+// ──────────────────────────────────────────
+// C. Core Attribution Engine
+// ──────────────────────────────────────────
+
+enum OrderStatus {
+  @@type("pg/text@1")
+  pending   = "pending"
+  paid      = "paid"
+  refunded  = "refunded"
+  partially_refunded = "partially_refunded"
+  voided    = "voided"
+}
+
+enum BookingStatus {
+  @@type("pg/text@1")
+  scheduled   = "scheduled"
+  confirmed   = "confirmed"
+  completed   = "completed"
+  cancelled   = "cancelled"
+  rescheduled = "rescheduled"
+  no_show     = "no_show"
+}
+
+enum MatchMethod {
+  @@type("pg/text@1")
+  token      = "token"
+  click_id   = "click_id"
+  email      = "email"
+  phone      = "phone"
+  none       = "none"
+}
+
+enum AttributionModelEnum {
+  @@type("pg/text@1")
+  first_touch     = "first_touch"
+  last_touch      = "last_touch"
+  last_non_direct = "last_non_direct"
+  linear          = "linear"
+  time_decay      = "time_decay"
+  position_based  = "position_based"
+}
+
+enum RawEventStatus {
+  @@type("pg/text@1")
+  pending    = "pending"
+  processed  = "processed"
+  failed     = "failed"
+  replaying  = "replaying"
+  dead       = "dead"
+}
+
+model Visitor {
+  id              String             @id @default(uuid())
+  workspaceId     String
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  visitorId       String             // device/browser fingerprint ID set by SDK
+  customerId      String?
+  customer        Customer?          @relation(fields: [customerId], references: [id])
+  firstSeenAt     TimestamptzString  @default(now())
+  lastSeenAt      TimestamptzString  @default(now())
+
+  touches         Touch[]
+  checkoutSessions CheckoutSession[]
+
+  @@unique([workspaceId, visitorId])
+  @@index([workspaceId])
+  @@index([customerId])
+}
+
+model Touch {
+  id              String             @id @default(uuid())
+  workspaceId     String
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  visitorId       String
+  visitor         Visitor            @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  siteId          String?
+  site            Site?              @relation(fields: [siteId], references: [id])
+  channel         String?
+  source          String?
+  medium          String?
+  campaign        String?
+  term            String?
+  content         String?
+  referrer        String?
+  landingPage     String?
+  pageTitle       String?
+  gclid           String?
+  fbclid          String?
+  ttclid          String?
+  msclkid         String?
+  fbc             String?
+  fbp             String?
+  ga              String?
+  ip              String?
+  userAgent       String?
+  touchedAt       TimestamptzString  @default(now())
+  createdAt       TimestamptzString  @default(now())
+
+  attributionCredits AttributionCredit[]
+
+  @@index([workspaceId])
+  @@index([visitorId])
+  @@index([touchedAt])
+}
+
+model Customer {
+  id              String             @id @default(uuid())
+  workspaceId     String
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  emailHash       String?
+  emailEnc        Bytes?
+  phoneHash       String?
+  externalIds     Json?
+  firstSeenAt     TimestamptzString  @default(now())
+  firstPurchaseAt TimestamptzString?
+  lastPurchaseAt  TimestamptzString?
+  mergedIntoId    String?
+  mergedInto      Customer?          @relation("CustomerMerge", fields: [mergedIntoId], references: [id])
+  mergedFrom      Customer[]         @relation("CustomerMerge")
+  createdAt       TimestamptzString  @default(now())
+  updatedAt       temporal.updatedAtString()
+
+  visitors        Visitor[]
+  orders          Order[]
+  bookings        Booking[]
+
+  @@index([workspaceId])
+  @@index([emailHash])
+  @@index([phoneHash])
+}
+
+model CheckoutSession {
+  id             String             @id @default(uuid())
+  workspaceId    String
+  workspace      Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  token          String             @unique @default(uuid())
+  visitorId      String
+  visitor        Visitor            @relation(fields: [visitorId], references: [id])
+  frozenTouches  Json               // snapshot of touch IDs + metadata at freeze time
+  expiresAt      TimestamptzString
+  consumedAt     TimestamptzString?
+  consumedOrderId String?
+  createdAt      TimestamptzString  @default(now())
+
+  @@index([workspaceId])
+  @@index([token])
+}
+
+model Order {
+  id              String             @id @default(uuid())
+  workspaceId     String
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  locationId      String?
+  location        Location?          @relation(fields: [locationId], references: [id])
+  customerId      String?
+  customer        Customer?          @relation(fields: [customerId], references: [id])
+  externalId      String?
+  connectorId     String?
+  connector       Connector?         @relation(fields: [connectorId], references: [id])
+  status          OrderStatus        @default(paid)
+  grossMinorUnits BigInt
+  discountMinorUnits BigInt          @default(0)
+  taxMinorUnits   BigInt             @default(0)
+  netMinorUnits   BigInt
+  refundedMinorUnits BigInt          @default(0)
+  currency        VarChar(3)
+  fxRateToReporting Decimal?
+  reportingCurrency VarChar(3)?
+  checkoutToken   String?
+  matchMethod     MatchMethod        @default(none)
+  isNewCustomer   Boolean            @default(false)
+  idempotencyKey  String?
+  rawPayload      Json?
+  orderedAt       TimestamptzString
+  createdAt       TimestamptzString  @default(now())
+  updatedAt       temporal.updatedAtString()
+
+  items           OrderItem[]
+  refunds         Refund[]
+  attributionCredits AttributionCredit[]
+
+  @@unique([workspaceId, externalId])
+  @@index([workspaceId])
+  @@index([customerId])
+  @@index([orderedAt])
+}
+
+model OrderItem {
+  id              String             @id @default(uuid())
+  orderId         String
+  order           Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  name            String
+  quantity        Int                @default(1)
+  unitMinorUnits  BigInt
+  totalMinorUnits BigInt
+  currency        VarChar(3)
+  externalId      String?
+  createdAt       TimestamptzString  @default(now())
+
+  @@index([orderId])
+}
+
+model Refund {
+  id              String             @id @default(uuid())
+  workspaceId     String
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  orderId         String
+  order           Order              @relation(fields: [orderId], references: [id])
+  amountMinorUnits BigInt
+  currency        VarChar(3)
+  reason          String?
+  externalId      String?
+  idempotencyKey  String?
+  refundedAt      TimestamptzString
+  createdAt       TimestamptzString  @default(now())
+
+  @@index([workspaceId])
+  @@index([orderId])
+}
+
+model Booking {
+  id              String             @id @default(uuid())
+  workspaceId     String
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  locationId      String?
+  location        Location?          @relation(fields: [locationId], references: [id])
+  customerId      String?
+  customer        Customer?          @relation(fields: [customerId], references: [id])
+  externalId      String?
+  connectorId     String?
+  connector       Connector?         @relation(fields: [connectorId], references: [id])
+  serviceName     String?
+  status          BookingStatus      @default(scheduled)
+  bookedValueMinorUnits BigInt       @default(0)
+  currency        VarChar(3)
+  appointmentStartAt TimestamptzString
+  appointmentEndAt TimestamptzString?
+  checkoutToken   String?
+  matchMethod     MatchMethod        @default(none)
+  isNewCustomer   Boolean            @default(false)
+  idempotencyKey  String?
+  rawPayload      Json?
+  createdAt       TimestamptzString  @default(now())
+  updatedAt       temporal.updatedAtString()
+
+  statusHistory   BookingStatusHistory[]
+  attributionCredits AttributionCredit[]
+
+  @@unique([workspaceId, externalId])
+  @@index([workspaceId])
+  @@index([customerId])
+  @@index([appointmentStartAt])
+}
+
+model BookingStatusHistory {
+  id          String             @id @default(uuid())
+  bookingId   String
+  booking     Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  status      BookingStatus
+  changedAt   TimestamptzString  @default(now())
+  reason      String?
+
+  @@index([bookingId])
+}
+
+model AttributionCredit {
+  id          String               @id @default(uuid())
+  workspaceId String
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  orderId     String?
+  order       Order?               @relation(fields: [orderId], references: [id])
+  bookingId   String?
+  booking     Booking?             @relation(fields: [bookingId], references: [id])
+  touchId     String?
+  touch       Touch?               @relation(fields: [touchId], references: [id])
+  model       AttributionModelEnum
+  share       Decimal              // 0.0 to 1.0
+  amountMinorUnits BigInt
+  currency    VarChar(3)
+  createdAt   TimestamptzString    @default(now())
+
+  @@index([workspaceId])
+  @@index([orderId])
+  @@index([bookingId])
+  @@index([touchId])
+}
+
+model RawEvent {
+  id          String             @id @default(uuid())
+  workspaceId String
+  workspace   Workspace          @relation(fields: [workspaceId], references: [id])
+  connectorId String?
+  connector   Connector?         @relation(fields: [connectorId], references: [id])
+  source      String
+  eventType   String
+  payload     Json
+  status      RawEventStatus     @default(pending)
+  error       String?
+  replayCount Int                @default(0)
+  processedAt TimestamptzString?
+  receivedAt  TimestamptzString  @default(now())
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([connectorId])
+}
+
+model Industry{
+  id          String             @id @default(uuid())
+  name        String
+}
+
+model PaymentGateway{
+  id          String             @id @default(uuid())
+  name        String
+}

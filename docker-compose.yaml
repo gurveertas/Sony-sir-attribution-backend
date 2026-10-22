@@ -1,0 +1,19 @@
+services:
+  server:
+    build: .
+    env_file:
+     -  .env
+  db:
+    image: postgres:17
+    container_name: test_postgres
+    environment:
+      POSTGRES_USER: Gurveer
+      POSTGRES_PASSWORD: "GpS123"
+      POSTGRES_DB: testingdb
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

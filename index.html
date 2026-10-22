@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Temporary Landing Page</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f4f6fb;
+            color: #1f2937;
+            line-height: 1.6;
+        }
+
+        header {
+            background: #1e3a8a;
+            color: #ffffff;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header .logo {
+            font-weight: bold;
+            font-size: 1.25rem;
+        }
+
+        header nav a {
+            color: #ffffff;
+            text-decoration: none;
+            margin-left: 1.5rem;
+        }
+
+        header nav a:hover {
+            text-decoration: underline;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 5rem 1.5rem;
+            background: linear-gradient(135deg, #1e3a8a, #3b82f6);
+            color: #ffffff;
+        }
+
+        .hero h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .hero p {
+            font-size: 1.15rem;
+            max-width: 600px;
+            margin: 0 auto 2rem;
+        }
+
+        .btn {
+            display: inline-block;
+            background: #f59e0b;
+            color: #1f2937;
+            padding: 0.85rem 2rem;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .btn:hover {
+            background: #d97706;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            max-width: 1000px;
+            margin: 3rem auto;
+            padding: 0 1.5rem;
+        }
+
+        .card {
+            background: #ffffff;
+            padding: 1.75rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .card h3 {
+            margin-bottom: 0.5rem;
+            color: #1e3a8a;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            background: #111827;
+            color: #9ca3af;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 600px) {
+            header {
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+
+            .hero h1 {
+                font-size: 1.9rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">YourBrand</div>
+        <nav>
+            <a href="#features">Features</a>
+            <a href="#contact">Contact</a>
+        </nav>
+    </header>
+
+    <section class="hero">
+        <h1>Welcome to Our Website</h1>
+        <p>A short description of what your business does and why visitors should stay.</p>
+        <a href="#contact" class="btn">Get Started</a>
+    </section>
+
+    <section id="features" class="features">
+        <div class="card">
+            <h3>Feature One</h3>
+            <p>Describe the first thing you offer here.</p>
+        </div>
+        <div class="card">
+            <h3>Feature Two</h3>
+            <p>Describe the second thing you offer here.</p>
+        </div>
+        <div class="card">
+            <h3>Feature Three</h3>
+            <p>Describe the third thing you offer here.</p>
+        </div>
+    </section>
+
+    <footer id="contact">
+        <p>&copy; 2026 YourBrand. All rights reserved.</p>
+    </footer>
+
+    <!-- Paste your tracking snippet below this line -->
+    <script>
+        (function () {
+            var API_KEY = "pk_test_MFug-NcERchZ2cHupE8-EwwZpKDtWkPYaxZladwla1U";
+            var ENDPOINT = "http://localhost:3000/v1/touches"; // use the real route
+
+            // Stable visitor ID stored in a cookie 
+            function getVisitorId() {
+                var match = document.cookie.match(/(?:^|; )aid_vid=([^;]+)/);
+                if (match){
+                    console.log('Is a match');
+                    return decodeURIComponent(match[1]);
+                }
+                var id = (crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2));
+                document.cookie = "aid_vid=" + encodeURIComponent(id) + "; max-age=63072000; path=/; SameSite=Lax";
+                return id;
+            }
+
+            var params = new URLSearchParams(window.location.search);
+            var payload = {
+                visitorId: getVisitorId(),
+                touchedAt: new Date().toISOString(),
+                source: params.get("utm_source"),
+                medium: params.get("utm_medium"),
+                campaign: params.get("utm_campaign"),
+                term: params.get("utm_term"),
+                content: params.get("utm_content"),
+                gclid: params.get("gclid"),
+                fbclid: params.get("fbclid"),
+                ttclid: params.get("ttclid"),
+                msclkid: params.get("msclkid"),
+                referrer: document.referrer || null,
+                landingPage: window.location.href,
+                pageTitle: document.title
+            };
+            console.log(payload);
+            function shouldSendTouch(payload) {
+                var KEY = "aid_session";
+                var WINDOW_MS = 30 * 60 * 1000;
+                var signature = [payload.visitorId, payload.source, payload.medium, payload.campaign,
+                payload.gclid, payload.fbclid, payload.ttclid, payload.msclkid].join("|");
+                console.log(signature);
+                var last = null;
+                try { last = JSON.parse(sessionStorage.getItem(KEY)); } catch (e) { }
+
+                var isNewSession = !last || Date.now() - last.at > WINDOW_MS;
+                var campaignChanged = last && last.sig !== signature && signature !== "|||||||";
+
+                if (!isNewSession && !campaignChanged) return false;
+
+                try { sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), sig: signature })); } catch (e) { }
+                return true;
+            }
+            if (shouldSendTouch(payload)) {
+                const result = fetch(ENDPOINT, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "authorization": `Bearer ${API_KEY}` },
+                    body: JSON.stringify(payload),
+                    keepalive: true
+                })
+                    .then(response => response.json())
+                    .then(data => console.log(data))
+                    .catch(error => console.error(error));
+            }
+            else{
+                console.log("Should not send touch for now");
+            }
+
+
+        })();
+
+    </script>
+
+</body>
+
+</html>

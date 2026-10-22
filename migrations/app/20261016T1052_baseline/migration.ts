@@ -1,0 +1,1702 @@
+#!/usr/bin/env -S node
+import type { Contract as End } from '../../snapshots/0ee86c45a1574c204800f00246c616eea709679d3a6daa07c128565fdc3af0e5/contract';
+import endContract from '../../snapshots/0ee86c45a1574c204800f00246c616eea709679d3a6daa07c128565fdc3af0e5/contract.json' with { type: 'json' };
+import {
+  Migration,
+  MigrationCLI,
+  checkExpression,
+  col,
+  fn,
+  lit,
+  primaryKey,
+} from '@prisma/orm-postgres/migration';
+
+export default class M extends Migration<never, End> {
+  override readonly endContractJson = endContract;
+
+  override get operations() {
+    return [
+      this.createSchema({ schema: 'public' }),
+      this.createTable({
+        schema: 'public',
+        table: 'ApiKey',
+        columns: [
+          col('allowedOrigins', 'text[]', {
+            notNull: true,
+            codecRef: { codecId: 'pg/text@1', many: true },
+          }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('createdBy', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('expiresAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('keyHash', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('keyPrefix', 'character varying(16)', {
+            notNull: true,
+            codecRef: { codecId: 'sql/varchar@1', typeParams: { length: 16 } },
+          }),
+          col('lastUsedAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('mode', 'text', {
+            notNull: true,
+            default: lit('live'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('name', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('rateLimitPerMin', 'int4', {
+            notNull: true,
+            default: lit(60),
+            codecRef: { codecId: 'pg/int4@1' },
+          }),
+          col('revokedAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('rotatedFromId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('siteId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('type', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'ApiKey_allowedOrigins_elem_not_null_d963e802',
+            'array_position("allowedOrigins", NULL) IS NULL',
+          ),
+          checkExpression('ApiKey_mode_check_30dfa9e2', `"mode" IN ('test', 'live')`),
+          checkExpression('ApiKey_type_check_9bdbd101', `"type" IN ('publishable', 'secret')`),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'AttributionCredit',
+        columns: [
+          col('amountMinorUnits', 'int8', { notNull: true, codecRef: { codecId: 'pg/int8@1' } }),
+          col('bookingId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('currency', 'character varying(3)', {
+            notNull: true,
+            codecRef: { codecId: 'sql/varchar@1', typeParams: { length: 3 } },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('model', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('orderId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('share', 'numeric', { notNull: true, codecRef: { codecId: 'pg/numeric@1' } }),
+          col('touchId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'AttributionCredit_model_check_82ba79db',
+            `"model" IN ('first_touch', 'last_touch', 'last_non_direct', 'linear', 'time_decay', 'position_based')`,
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'AuditLog',
+        columns: [
+          col('action', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('actorType', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('actorUserId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('ip', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('metadata', 'json', { codecRef: { codecId: 'pg/json@1' } }),
+          col('reason', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('targetId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('targetType', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('userAgent', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('workspaceId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'AuditLog_actorType_check_0d99bf46',
+            `"actorType" IN ('user', 'platform_admin', 'api_key', 'system')`,
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Booking',
+        columns: [
+          col('appointmentEndAt', 'timestamptz', {
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('appointmentStartAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('bookedValueMinorUnits', 'int8', {
+            notNull: true,
+            default: lit('0'),
+            codecRef: { codecId: 'pg/int8@1' },
+          }),
+          col('checkoutToken', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('connectorId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('currency', 'character varying(3)', {
+            notNull: true,
+            codecRef: { codecId: 'sql/varchar@1', typeParams: { length: 3 } },
+          }),
+          col('customerId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('externalId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('idempotencyKey', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('isNewCustomer', 'bool', {
+            notNull: true,
+            default: lit(false),
+            codecRef: { codecId: 'pg/bool@1' },
+          }),
+          col('locationId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('matchMethod', 'text', {
+            notNull: true,
+            default: lit('none'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('rawPayload', 'json', { codecRef: { codecId: 'pg/json@1' } }),
+          col('serviceName', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('status', 'text', {
+            notNull: true,
+            default: lit('scheduled'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('updatedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'Booking_matchMethod_check_4a40748d',
+            `"matchMethod" IN ('token', 'click_id', 'email', 'phone', 'none')`,
+          ),
+          checkExpression(
+            'Booking_status_check_376e84c9',
+            `"status" IN ('scheduled', 'confirmed', 'completed', 'cancelled', 'rescheduled', 'no_show')`,
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'BookingStatusHistory',
+        columns: [
+          col('bookingId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('changedAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('reason', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('status', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'BookingStatusHistory_status_check_376e84c9',
+            `"status" IN ('scheduled', 'confirmed', 'completed', 'cancelled', 'rescheduled', 'no_show')`,
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'ChannelMappingRule',
+        columns: [
+          col('channel', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('isActive', 'bool', {
+            notNull: true,
+            default: lit(true),
+            codecRef: { codecId: 'pg/bool@1' },
+          }),
+          col('match', 'json', { notNull: true, codecRef: { codecId: 'pg/json@1' } }),
+          col('priority', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
+          col('updatedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [primaryKey(['id'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'CheckoutSession',
+        columns: [
+          col('consumedAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('consumedOrderId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('expiresAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('frozenTouches', 'json', { notNull: true, codecRef: { codecId: 'pg/json@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('token', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('visitorId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [primaryKey(['id'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Connector',
+        columns: [
+          col('config', 'json', { codecRef: { codecId: 'pg/json@1' } }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('errorCount', 'int4', {
+            notNull: true,
+            default: lit(0),
+            codecRef: { codecId: 'pg/int4@1' },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('lastError', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('lastErrorAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('lastEventAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('name', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('publicId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('secretsEnc', 'bytea', { codecRef: { codecId: 'pg/bytea@1' } }),
+          col('status', 'text', {
+            notNull: true,
+            default: lit('pending'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('type', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('updatedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'Connector_status_check_43ef7efc',
+            `"status" IN ('pending', 'healthy', 'failing', 'disabled')`,
+          ),
+          checkExpression(
+            'Connector_type_check_9be54faa',
+            `"type" IN ('zenoti', 'stripe', 'shopify', 'razorpay', 'generic', 'woocommerce', 'paypal', 'square')`,
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Customer',
+        columns: [
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('emailHash', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('externalIds', 'json', { codecRef: { codecId: 'pg/json@1' } }),
+          col('firstPurchaseAt', 'timestamptz', {
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('firstSeenAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('lastPurchaseAt', 'timestamptz', {
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('mergedIntoId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('phoneHash', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('updatedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [primaryKey(['id'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Invite',
+        columns: [
+          col('acceptedAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('allowedLocationIds', 'text[]', {
+            notNull: true,
+            codecRef: { codecId: 'pg/text@1', many: true },
+          }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('email', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('expiresAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('invitedBy', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('revokedAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('role', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('tokenHash', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'Invite_allowedLocationIds_elem_not_null_84217f46',
+            'array_position("allowedLocationIds", NULL) IS NULL',
+          ),
+          checkExpression(
+            'Invite_role_check_74d9b019',
+            `"role" IN ('platform_admin', 'company_admin', 'company_viewer')`,
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Location',
+        columns: [
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('currency', 'character varying(3)', {
+            notNull: true,
+            default: lit('USD'),
+            codecRef: { codecId: 'sql/varchar@1', typeParams: { length: 3 } },
+          }),
+          col('externalIds', 'json', { codecRef: { codecId: 'pg/json@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('isActive', 'bool', {
+            notNull: true,
+            default: lit(true),
+            codecRef: { codecId: 'pg/bool@1' },
+          }),
+          col('name', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('timezone', 'text', {
+            notNull: true,
+            default: lit('UTC'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('updatedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [primaryKey(['id'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Order',
+        columns: [
+          col('checkoutToken', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('connectorId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('currency', 'character varying(3)', {
+            notNull: true,
+            codecRef: { codecId: 'sql/varchar@1', typeParams: { length: 3 } },
+          }),
+          col('customerId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('discountMinorUnits', 'int8', {
+            notNull: true,
+            default: lit('0'),
+            codecRef: { codecId: 'pg/int8@1' },
+          }),
+          col('externalId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('fxRateToReporting', 'numeric', { codecRef: { codecId: 'pg/numeric@1' } }),
+          col('grossMinorUnits', 'int8', { notNull: true, codecRef: { codecId: 'pg/int8@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('idempotencyKey', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('isNewCustomer', 'bool', {
+            notNull: true,
+            default: lit(false),
+            codecRef: { codecId: 'pg/bool@1' },
+          }),
+          col('locationId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('matchMethod', 'text', {
+            notNull: true,
+            default: lit('none'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('netMinorUnits', 'int8', { notNull: true, codecRef: { codecId: 'pg/int8@1' } }),
+          col('orderedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('rawPayload', 'json', { codecRef: { codecId: 'pg/json@1' } }),
+          col('refundedMinorUnits', 'int8', {
+            notNull: true,
+            default: lit('0'),
+            codecRef: { codecId: 'pg/int8@1' },
+          }),
+          col('reportingCurrency', 'character varying(3)', {
+            codecRef: { codecId: 'sql/varchar@1', typeParams: { length: 3 } },
+          }),
+          col('status', 'text', {
+            notNull: true,
+            default: lit('paid'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('taxMinorUnits', 'int8', {
+            notNull: true,
+            default: lit('0'),
+            codecRef: { codecId: 'pg/int8@1' },
+          }),
+          col('updatedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'Order_matchMethod_check_4a40748d',
+            `"matchMethod" IN ('token', 'click_id', 'email', 'phone', 'none')`,
+          ),
+          checkExpression(
+            'Order_status_check_c9ff30e9',
+            `"status" IN ('pending', 'paid', 'refunded', 'partially_refunded', 'voided')`,
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'OrderItem',
+        columns: [
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('currency', 'character varying(3)', {
+            notNull: true,
+            codecRef: { codecId: 'sql/varchar@1', typeParams: { length: 3 } },
+          }),
+          col('externalId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('name', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('orderId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('quantity', 'int4', {
+            notNull: true,
+            default: lit(1),
+            codecRef: { codecId: 'pg/int4@1' },
+          }),
+          col('totalMinorUnits', 'int8', { notNull: true, codecRef: { codecId: 'pg/int8@1' } }),
+          col('unitMinorUnits', 'int8', { notNull: true, codecRef: { codecId: 'pg/int8@1' } }),
+        ],
+        constraints: [primaryKey(['id'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'RawEvent',
+        columns: [
+          col('connectorId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('error', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('eventType', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('payload', 'json', { notNull: true, codecRef: { codecId: 'pg/json@1' } }),
+          col('processedAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('receivedAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('replayCount', 'int4', {
+            notNull: true,
+            default: lit(0),
+            codecRef: { codecId: 'pg/int4@1' },
+          }),
+          col('source', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('status', 'text', {
+            notNull: true,
+            default: lit('pending'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'RawEvent_status_check_aa7b9c78',
+            `"status" IN ('pending', 'processed', 'failed', 'replaying', 'dead')`,
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Refund',
+        columns: [
+          col('amountMinorUnits', 'int8', { notNull: true, codecRef: { codecId: 'pg/int8@1' } }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('currency', 'character varying(3)', {
+            notNull: true,
+            codecRef: { codecId: 'sql/varchar@1', typeParams: { length: 3 } },
+          }),
+          col('externalId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('idempotencyKey', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('orderId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('reason', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('refundedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [primaryKey(['id'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Session',
+        columns: [
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('expiresAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('ip', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('lastSeenAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('refreshTokenHash', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('revokedAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('userAgent', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('userId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [primaryKey(['id'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Site',
+        columns: [
+          col('allowedOrigins', 'text[]', {
+            notNull: true,
+            codecRef: { codecId: 'pg/text@1', many: true },
+          }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('domain', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('sdkSettings', 'json', { codecRef: { codecId: 'pg/json@1' } }),
+          col('updatedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('verificationMethod', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('verificationToken', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('verifiedAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'Site_allowedOrigins_elem_not_null_d963e802',
+            'array_position("allowedOrigins", NULL) IS NULL',
+          ),
+          checkExpression(
+            'Site_verificationMethod_check_f6798e6a',
+            `"verificationMethod" IN ('dns_txt', 'meta_tag')`,
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'SupportAccessSession',
+        columns: [
+          col('adminUserId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('endedAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('expiresAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('maskPii', 'bool', {
+            notNull: true,
+            default: lit(true),
+            codecRef: { codecId: 'pg/bool@1' },
+          }),
+          col('reason', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('startedAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [primaryKey(['id'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Touch',
+        columns: [
+          col('campaign', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('channel', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('content', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('fbc', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('fbclid', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('fbp', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('ga', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('gclid', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('ip', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('landingPage', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('medium', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('msclkid', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('pageTitle', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('referrer', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('siteId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('source', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('term', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('touchedAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('ttclid', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('userAgent', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('visitorId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [primaryKey(['id'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'User',
+        columns: [
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('email', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('emailVerifiedAt', 'timestamptz', {
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('failedLoginCount', 'int4', {
+            notNull: true,
+            default: lit(0),
+            codecRef: { codecId: 'pg/int4@1' },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('lastLoginAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('lockedUntil', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('name', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('passwordHash', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('role', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('status', 'text', {
+            notNull: true,
+            default: lit('invited'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('twoFactorEnabled', 'bool', {
+            notNull: true,
+            default: lit(false),
+            codecRef: { codecId: 'pg/bool@1' },
+          }),
+          col('updatedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('workspaceId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'User_role_check_74d9b019',
+            `"role" IN ('platform_admin', 'company_admin', 'company_viewer')`,
+          ),
+          checkExpression(
+            'User_status_check_f856bcca',
+            `"status" IN ('invited', 'active', 'deactivated')`,
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'UserLocationAccess',
+        columns: [
+          col('locationId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('userId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [primaryKey(['userId', 'locationId'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Visitor',
+        columns: [
+          col('customerId', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('firstSeenAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('lastSeenAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('visitorId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [primaryKey(['id'])],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'WebhookEndpoint',
+        columns: [
+          col('consecutiveFailures', 'int4', {
+            notNull: true,
+            default: lit(0),
+            codecRef: { codecId: 'pg/int4@1' },
+          }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('disabledReason', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('eventTypes', 'text[]', {
+            notNull: true,
+            codecRef: { codecId: 'pg/text@1', many: true },
+          }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('isActive', 'bool', {
+            notNull: true,
+            default: lit(true),
+            codecRef: { codecId: 'pg/bool@1' },
+          }),
+          col('signingSecretEnc', 'bytea', { codecRef: { codecId: 'pg/bytea@1' } }),
+          col('updatedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('url', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('workspaceId', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'WebhookEndpoint_eventTypes_elem_not_null_9d7fdd2b',
+            'array_position("eventTypes", NULL) IS NULL',
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
+        table: 'Workspace',
+        columns: [
+          col('approvedAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('approvedBy', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('consentMode', 'text', {
+            notNull: true,
+            default: lit('off'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('country', 'character varying(2)', {
+            notNull: true,
+            codecRef: { codecId: 'sql/varchar@1', typeParams: { length: 2 } },
+          }),
+          col('createdAt', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('dataRegion', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('defaultModel', 'text', {
+            notNull: true,
+            default: lit('last_non_direct'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('deletedAt', 'timestamptz', { codecRef: { codecId: 'pg/timestamptz-string@1' } }),
+          col('emailVerificationExpires', 'timestamptz', {
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('emailVerificationHash', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('industry', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('lookbackDays', 'int4', {
+            notNull: true,
+            default: lit(30),
+            codecRef: { codecId: 'pg/int4@1' },
+          }),
+          col('lookbackOverrides', 'json', { codecRef: { codecId: 'pg/json@1' } }),
+          col('name', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('plan', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('rawRetentionMonths', 'int4', {
+            notNull: true,
+            default: lit(13),
+            codecRef: { codecId: 'pg/int4@1' },
+          }),
+          col('reportingCurrency', 'character varying(3)', {
+            notNull: true,
+            default: lit('USD'),
+            codecRef: { codecId: 'sql/varchar@1', typeParams: { length: 3 } },
+          }),
+          col('slug', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('status', 'text', {
+            notNull: true,
+            default: lit('pending'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('suspendedReason', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('timezone', 'text', {
+            notNull: true,
+            default: lit('UTC'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('updatedAt', 'timestamptz', {
+            notNull: true,
+            codecRef: { codecId: 'pg/timestamptz-string@1' },
+          }),
+          col('websiteUrl', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+          col('weekStart', 'int2', {
+            notNull: true,
+            default: lit(1),
+            codecRef: { codecId: 'pg/int2@1' },
+          }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'Workspace_consentMode_check_906800ff',
+            `"consentMode" IN ('off', 'opt_in', 'opt_out')`,
+          ),
+          checkExpression(
+            'Workspace_defaultModel_check_4744b886',
+            `"defaultModel" IN ('first_touch', 'last_touch', 'last_non_direct', 'linear', 'time_decay', 'position_based')`,
+          ),
+          checkExpression(
+            'Workspace_status_check_4dc0f300',
+            `"status" IN ('pending', 'active', 'suspended', 'closed')`,
+          ),
+        ],
+      }),
+      this.addUnique({
+        schema: 'public',
+        table: 'ApiKey',
+        constraint: 'ApiKey_keyHash_key',
+        columns: ['keyHash'],
+      }),
+      this.addUnique({
+        schema: 'public',
+        table: 'Booking',
+        constraint: 'Booking_workspaceId_externalId_key',
+        columns: ['workspaceId', 'externalId'],
+      }),
+      this.addUnique({
+        schema: 'public',
+        table: 'CheckoutSession',
+        constraint: 'CheckoutSession_token_key',
+        columns: ['token'],
+      }),
+      this.addUnique({
+        schema: 'public',
+        table: 'Connector',
+        constraint: 'Connector_publicId_key',
+        columns: ['publicId'],
+      }),
+      this.addUnique({
+        schema: 'public',
+        table: 'Invite',
+        constraint: 'Invite_tokenHash_key',
+        columns: ['tokenHash'],
+      }),
+      this.addUnique({
+        schema: 'public',
+        table: 'Order',
+        constraint: 'Order_workspaceId_externalId_key',
+        columns: ['workspaceId', 'externalId'],
+      }),
+      this.addUnique({
+        schema: 'public',
+        table: 'Site',
+        constraint: 'Site_workspaceId_domain_key',
+        columns: ['workspaceId', 'domain'],
+      }),
+      this.addUnique({
+        schema: 'public',
+        table: 'User',
+        constraint: 'User_email_key',
+        columns: ['email'],
+      }),
+      this.addUnique({
+        schema: 'public',
+        table: 'Visitor',
+        constraint: 'Visitor_workspaceId_visitorId_key',
+        columns: ['workspaceId', 'visitorId'],
+      }),
+      this.addUnique({
+        schema: 'public',
+        table: 'Workspace',
+        constraint: 'Workspace_slug_key',
+        columns: ['slug'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'ApiKey',
+        index: 'ApiKey_siteId_idx_cabdc5ab',
+        columns: ['siteId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'ApiKey',
+        index: 'ApiKey_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'AttributionCredit',
+        index: 'AttributionCredit_bookingId_idx_17848f4a',
+        columns: ['bookingId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'AttributionCredit',
+        index: 'AttributionCredit_orderId_idx_d284871b',
+        columns: ['orderId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'AttributionCredit',
+        index: 'AttributionCredit_touchId_idx_44220f8d',
+        columns: ['touchId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'AttributionCredit',
+        index: 'AttributionCredit_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'AuditLog',
+        index: 'AuditLog_action_idx_cd0d2116',
+        columns: ['action'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'AuditLog',
+        index: 'AuditLog_actorUserId_idx_96dac96c',
+        columns: ['actorUserId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'AuditLog',
+        index: 'AuditLog_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Booking',
+        index: 'Booking_appointmentStartAt_idx_6063ce55',
+        columns: ['appointmentStartAt'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Booking',
+        index: 'Booking_connectorId_idx_a980b131',
+        columns: ['connectorId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Booking',
+        index: 'Booking_customerId_idx_b2a8a46c',
+        columns: ['customerId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Booking',
+        index: 'Booking_locationId_idx_7aae3038',
+        columns: ['locationId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Booking',
+        index: 'Booking_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'BookingStatusHistory',
+        index: 'BookingStatusHistory_bookingId_idx_17848f4a',
+        columns: ['bookingId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'ChannelMappingRule',
+        index: 'ChannelMappingRule_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'CheckoutSession',
+        index: 'CheckoutSession_token_idx_8b25281e',
+        columns: ['token'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'CheckoutSession',
+        index: 'CheckoutSession_visitorId_idx_9d3ff46a',
+        columns: ['visitorId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'CheckoutSession',
+        index: 'CheckoutSession_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Connector',
+        index: 'Connector_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Customer',
+        index: 'Customer_emailHash_idx_9b6f176d',
+        columns: ['emailHash'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Customer',
+        index: 'Customer_mergedIntoId_idx_470bd53d',
+        columns: ['mergedIntoId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Customer',
+        index: 'Customer_phoneHash_idx_846afe22',
+        columns: ['phoneHash'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Customer',
+        index: 'Customer_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Invite',
+        index: 'Invite_invitedBy_idx_8266eaa5',
+        columns: ['invitedBy'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Invite',
+        index: 'Invite_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Location',
+        index: 'Location_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Order',
+        index: 'Order_connectorId_idx_a980b131',
+        columns: ['connectorId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Order',
+        index: 'Order_customerId_idx_b2a8a46c',
+        columns: ['customerId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Order',
+        index: 'Order_locationId_idx_7aae3038',
+        columns: ['locationId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Order',
+        index: 'Order_orderedAt_idx_8975db31',
+        columns: ['orderedAt'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Order',
+        index: 'Order_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'OrderItem',
+        index: 'OrderItem_orderId_idx_d284871b',
+        columns: ['orderId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'RawEvent',
+        index: 'RawEvent_connectorId_idx_a980b131',
+        columns: ['connectorId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'RawEvent',
+        index: 'RawEvent_status_idx_e98638ab',
+        columns: ['status'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'RawEvent',
+        index: 'RawEvent_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Refund',
+        index: 'Refund_orderId_idx_d284871b',
+        columns: ['orderId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Refund',
+        index: 'Refund_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Session',
+        index: 'Session_userId_idx_a489d58a',
+        columns: ['userId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Site',
+        index: 'Site_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'SupportAccessSession',
+        index: 'SupportAccessSession_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Touch',
+        index: 'Touch_siteId_idx_cabdc5ab',
+        columns: ['siteId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Touch',
+        index: 'Touch_touchedAt_idx_b2a4180a',
+        columns: ['touchedAt'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Touch',
+        index: 'Touch_visitorId_idx_9d3ff46a',
+        columns: ['visitorId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Touch',
+        index: 'Touch_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'User',
+        index: 'User_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'UserLocationAccess',
+        index: 'UserLocationAccess_locationId_idx_7aae3038',
+        columns: ['locationId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'UserLocationAccess',
+        index: 'UserLocationAccess_userId_idx_a489d58a',
+        columns: ['userId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'UserLocationAccess',
+        index: 'UserLocationAccess_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Visitor',
+        index: 'Visitor_customerId_idx_b2a8a46c',
+        columns: ['customerId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'Visitor',
+        index: 'Visitor_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.createIndex({
+        schema: 'public',
+        table: 'WebhookEndpoint',
+        index: 'WebhookEndpoint_workspaceId_idx_ba65f874',
+        columns: ['workspaceId'],
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'ApiKey',
+        foreignKey: {
+          name: 'ApiKey_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'ApiKey',
+        foreignKey: {
+          name: 'ApiKey_siteId_fkey',
+          columns: ['siteId'],
+          references: { schema: 'public', table: 'Site', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'AttributionCredit',
+        foreignKey: {
+          name: 'AttributionCredit_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'AttributionCredit',
+        foreignKey: {
+          name: 'AttributionCredit_orderId_fkey',
+          columns: ['orderId'],
+          references: { schema: 'public', table: 'Order', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'AttributionCredit',
+        foreignKey: {
+          name: 'AttributionCredit_bookingId_fkey',
+          columns: ['bookingId'],
+          references: { schema: 'public', table: 'Booking', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'AttributionCredit',
+        foreignKey: {
+          name: 'AttributionCredit_touchId_fkey',
+          columns: ['touchId'],
+          references: { schema: 'public', table: 'Touch', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'AuditLog',
+        foreignKey: {
+          name: 'AuditLog_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Booking',
+        foreignKey: {
+          name: 'Booking_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Booking',
+        foreignKey: {
+          name: 'Booking_locationId_fkey',
+          columns: ['locationId'],
+          references: { schema: 'public', table: 'Location', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Booking',
+        foreignKey: {
+          name: 'Booking_customerId_fkey',
+          columns: ['customerId'],
+          references: { schema: 'public', table: 'Customer', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Booking',
+        foreignKey: {
+          name: 'Booking_connectorId_fkey',
+          columns: ['connectorId'],
+          references: { schema: 'public', table: 'Connector', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'BookingStatusHistory',
+        foreignKey: {
+          name: 'BookingStatusHistory_bookingId_fkey',
+          columns: ['bookingId'],
+          references: { schema: 'public', table: 'Booking', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'ChannelMappingRule',
+        foreignKey: {
+          name: 'ChannelMappingRule_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'CheckoutSession',
+        foreignKey: {
+          name: 'CheckoutSession_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'CheckoutSession',
+        foreignKey: {
+          name: 'CheckoutSession_visitorId_fkey',
+          columns: ['visitorId'],
+          references: { schema: 'public', table: 'Visitor', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Connector',
+        foreignKey: {
+          name: 'Connector_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Customer',
+        foreignKey: {
+          name: 'Customer_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Customer',
+        foreignKey: {
+          name: 'Customer_mergedIntoId_fkey',
+          columns: ['mergedIntoId'],
+          references: { schema: 'public', table: 'Customer', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Invite',
+        foreignKey: {
+          name: 'Invite_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Invite',
+        foreignKey: {
+          name: 'Invite_invitedBy_fkey',
+          columns: ['invitedBy'],
+          references: { schema: 'public', table: 'User', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Location',
+        foreignKey: {
+          name: 'Location_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Order',
+        foreignKey: {
+          name: 'Order_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Order',
+        foreignKey: {
+          name: 'Order_locationId_fkey',
+          columns: ['locationId'],
+          references: { schema: 'public', table: 'Location', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Order',
+        foreignKey: {
+          name: 'Order_customerId_fkey',
+          columns: ['customerId'],
+          references: { schema: 'public', table: 'Customer', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Order',
+        foreignKey: {
+          name: 'Order_connectorId_fkey',
+          columns: ['connectorId'],
+          references: { schema: 'public', table: 'Connector', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'OrderItem',
+        foreignKey: {
+          name: 'OrderItem_orderId_fkey',
+          columns: ['orderId'],
+          references: { schema: 'public', table: 'Order', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'RawEvent',
+        foreignKey: {
+          name: 'RawEvent_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'RawEvent',
+        foreignKey: {
+          name: 'RawEvent_connectorId_fkey',
+          columns: ['connectorId'],
+          references: { schema: 'public', table: 'Connector', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Refund',
+        foreignKey: {
+          name: 'Refund_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Refund',
+        foreignKey: {
+          name: 'Refund_orderId_fkey',
+          columns: ['orderId'],
+          references: { schema: 'public', table: 'Order', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Session',
+        foreignKey: {
+          name: 'Session_userId_fkey',
+          columns: ['userId'],
+          references: { schema: 'public', table: 'User', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Site',
+        foreignKey: {
+          name: 'Site_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'SupportAccessSession',
+        foreignKey: {
+          name: 'SupportAccessSession_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Touch',
+        foreignKey: {
+          name: 'Touch_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Touch',
+        foreignKey: {
+          name: 'Touch_visitorId_fkey',
+          columns: ['visitorId'],
+          references: { schema: 'public', table: 'Visitor', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Touch',
+        foreignKey: {
+          name: 'Touch_siteId_fkey',
+          columns: ['siteId'],
+          references: { schema: 'public', table: 'Site', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'User',
+        foreignKey: {
+          name: 'User_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'UserLocationAccess',
+        foreignKey: {
+          name: 'UserLocationAccess_userId_fkey',
+          columns: ['userId'],
+          references: { schema: 'public', table: 'User', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'UserLocationAccess',
+        foreignKey: {
+          name: 'UserLocationAccess_locationId_fkey',
+          columns: ['locationId'],
+          references: { schema: 'public', table: 'Location', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Visitor',
+        foreignKey: {
+          name: 'Visitor_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'Visitor',
+        foreignKey: {
+          name: 'Visitor_customerId_fkey',
+          columns: ['customerId'],
+          references: { schema: 'public', table: 'Customer', columns: ['id'] },
+        },
+      }),
+      this.addForeignKey({
+        schema: 'public',
+        table: 'WebhookEndpoint',
+        foreignKey: {
+          name: 'WebhookEndpoint_workspaceId_fkey',
+          columns: ['workspaceId'],
+          references: { schema: 'public', table: 'Workspace', columns: ['id'] },
+          onDelete: 'cascade',
+        },
+      }),
+    ];
+  }
+}
+
+MigrationCLI.run(import.meta.url, M);

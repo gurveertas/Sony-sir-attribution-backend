@@ -1,0 +1,5167 @@
+[
+  {
+    "id": "schema.public",
+    "label": "Create schema \"public\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [],
+    "execute": [
+      {
+        "description": "Create schema \"public\"",
+        "sql": "CREATE SCHEMA IF NOT EXISTS \"public\"",
+        "params": []
+      }
+    ],
+    "postcheck": []
+  },
+  {
+    "id": "table.ApiKey",
+    "label": "Create table \"ApiKey\"",
+    "summary": "Creates table \"ApiKey\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "ApiKey"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"ApiKey\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ApiKey\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"ApiKey\"",
+        "sql": "CREATE TABLE \"public\".\"ApiKey\" (\n  \"allowedOrigins\" text[] NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"createdBy\" text NOT NULL,\n  \"expiresAt\" timestamptz,\n  \"id\" text NOT NULL,\n  \"keyHash\" text NOT NULL,\n  \"keyPrefix\" character varying(16) NOT NULL,\n  \"lastUsedAt\" timestamptz,\n  \"mode\" text DEFAULT 'live' NOT NULL,\n  \"name\" text NOT NULL,\n  \"rateLimitPerMin\" int4 DEFAULT 60 NOT NULL,\n  \"revokedAt\" timestamptz,\n  \"rotatedFromId\" text,\n  \"siteId\" text,\n  \"type\" text NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"ApiKey_allowedOrigins_elem_not_null_d963e802\" CHECK (array_position(\"allowedOrigins\", NULL) IS NULL),\n  CONSTRAINT \"ApiKey_mode_check_30dfa9e2\" CHECK (\"mode\" IN ('test', 'live')),\n  CONSTRAINT \"ApiKey_type_check_9bdbd101\" CHECK (\"type\" IN ('publishable', 'secret'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"ApiKey\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ApiKey\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.AttributionCredit",
+    "label": "Create table \"AttributionCredit\"",
+    "summary": "Creates table \"AttributionCredit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "AttributionCredit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"AttributionCredit\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AttributionCredit\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"AttributionCredit\"",
+        "sql": "CREATE TABLE \"public\".\"AttributionCredit\" (\n  \"amountMinorUnits\" int8 NOT NULL,\n  \"bookingId\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"currency\" character varying(3) NOT NULL,\n  \"id\" text NOT NULL,\n  \"model\" text NOT NULL,\n  \"orderId\" text,\n  \"share\" numeric NOT NULL,\n  \"touchId\" text,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"AttributionCredit_model_check_82ba79db\" CHECK (\"model\" IN ('first_touch', 'last_touch', 'last_non_direct', 'linear', 'time_decay', 'position_based'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"AttributionCredit\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AttributionCredit\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.AuditLog",
+    "label": "Create table \"AuditLog\"",
+    "summary": "Creates table \"AuditLog\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "AuditLog"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"AuditLog\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AuditLog\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"AuditLog\"",
+        "sql": "CREATE TABLE \"public\".\"AuditLog\" (\n  \"action\" text NOT NULL,\n  \"actorType\" text NOT NULL,\n  \"actorUserId\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"ip\" text,\n  \"metadata\" json,\n  \"reason\" text,\n  \"targetId\" text,\n  \"targetType\" text,\n  \"userAgent\" text,\n  \"workspaceId\" text,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"AuditLog_actorType_check_0d99bf46\" CHECK (\"actorType\" IN ('user', 'platform_admin', 'api_key', 'system'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"AuditLog\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AuditLog\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Booking",
+    "label": "Create table \"Booking\"",
+    "summary": "Creates table \"Booking\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Booking"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Booking\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Booking\"",
+        "sql": "CREATE TABLE \"public\".\"Booking\" (\n  \"appointmentEndAt\" timestamptz,\n  \"appointmentStartAt\" timestamptz NOT NULL,\n  \"bookedValueMinorUnits\" int8 DEFAULT '0'::int8 NOT NULL,\n  \"checkoutToken\" text,\n  \"connectorId\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"currency\" character varying(3) NOT NULL,\n  \"customerId\" text,\n  \"externalId\" text,\n  \"id\" text NOT NULL,\n  \"idempotencyKey\" text,\n  \"isNewCustomer\" bool DEFAULT false NOT NULL,\n  \"locationId\" text,\n  \"matchMethod\" text DEFAULT 'none' NOT NULL,\n  \"rawPayload\" json,\n  \"serviceName\" text,\n  \"status\" text DEFAULT 'scheduled' NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"Booking_matchMethod_check_4a40748d\" CHECK (\"matchMethod\" IN ('token', 'click_id', 'email', 'phone', 'none')),\n  CONSTRAINT \"Booking_status_check_376e84c9\" CHECK (\"status\" IN ('scheduled', 'confirmed', 'completed', 'cancelled', 'rescheduled', 'no_show'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Booking\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.BookingStatusHistory",
+    "label": "Create table \"BookingStatusHistory\"",
+    "summary": "Creates table \"BookingStatusHistory\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "BookingStatusHistory"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"BookingStatusHistory\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"BookingStatusHistory\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"BookingStatusHistory\"",
+        "sql": "CREATE TABLE \"public\".\"BookingStatusHistory\" (\n  \"bookingId\" text NOT NULL,\n  \"changedAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"reason\" text,\n  \"status\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"BookingStatusHistory_status_check_376e84c9\" CHECK (\"status\" IN ('scheduled', 'confirmed', 'completed', 'cancelled', 'rescheduled', 'no_show'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"BookingStatusHistory\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"BookingStatusHistory\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.ChannelMappingRule",
+    "label": "Create table \"ChannelMappingRule\"",
+    "summary": "Creates table \"ChannelMappingRule\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "ChannelMappingRule"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"ChannelMappingRule\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ChannelMappingRule\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"ChannelMappingRule\"",
+        "sql": "CREATE TABLE \"public\".\"ChannelMappingRule\" (\n  \"channel\" text NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"isActive\" bool DEFAULT true NOT NULL,\n  \"match\" json NOT NULL,\n  \"priority\" int4 NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"ChannelMappingRule\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ChannelMappingRule\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.CheckoutSession",
+    "label": "Create table \"CheckoutSession\"",
+    "summary": "Creates table \"CheckoutSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "CheckoutSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"CheckoutSession\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"CheckoutSession\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"CheckoutSession\"",
+        "sql": "CREATE TABLE \"public\".\"CheckoutSession\" (\n  \"consumedAt\" timestamptz,\n  \"consumedOrderId\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"expiresAt\" timestamptz NOT NULL,\n  \"frozenTouches\" json NOT NULL,\n  \"id\" text NOT NULL,\n  \"token\" text NOT NULL,\n  \"visitorId\" text NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"CheckoutSession\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"CheckoutSession\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Connector",
+    "label": "Create table \"Connector\"",
+    "summary": "Creates table \"Connector\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Connector"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Connector\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Connector\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Connector\"",
+        "sql": "CREATE TABLE \"public\".\"Connector\" (\n  \"config\" json,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"errorCount\" int4 DEFAULT 0 NOT NULL,\n  \"id\" text NOT NULL,\n  \"lastError\" text,\n  \"lastErrorAt\" timestamptz,\n  \"lastEventAt\" timestamptz,\n  \"name\" text NOT NULL,\n  \"publicId\" text NOT NULL,\n  \"secretsEnc\" bytea,\n  \"status\" text DEFAULT 'pending' NOT NULL,\n  \"type\" text NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"Connector_status_check_43ef7efc\" CHECK (\"status\" IN ('pending', 'healthy', 'failing', 'disabled')),\n  CONSTRAINT \"Connector_type_check_9be54faa\" CHECK (\"type\" IN ('zenoti', 'stripe', 'shopify', 'razorpay', 'generic', 'woocommerce', 'paypal', 'square'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Connector\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Connector\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Customer",
+    "label": "Create table \"Customer\"",
+    "summary": "Creates table \"Customer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Customer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Customer\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Customer\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Customer\"",
+        "sql": "CREATE TABLE \"public\".\"Customer\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"emailHash\" text,\n  \"externalIds\" json,\n  \"firstPurchaseAt\" timestamptz,\n  \"firstSeenAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"lastPurchaseAt\" timestamptz,\n  \"mergedIntoId\" text,\n  \"phoneHash\" text,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Customer\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Customer\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Invite",
+    "label": "Create table \"Invite\"",
+    "summary": "Creates table \"Invite\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Invite"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Invite\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Invite\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Invite\"",
+        "sql": "CREATE TABLE \"public\".\"Invite\" (\n  \"acceptedAt\" timestamptz,\n  \"allowedLocationIds\" text[] NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"email\" text NOT NULL,\n  \"expiresAt\" timestamptz NOT NULL,\n  \"id\" text NOT NULL,\n  \"invitedBy\" text NOT NULL,\n  \"revokedAt\" timestamptz,\n  \"role\" text NOT NULL,\n  \"tokenHash\" text NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"Invite_allowedLocationIds_elem_not_null_84217f46\" CHECK (array_position(\"allowedLocationIds\", NULL) IS NULL),\n  CONSTRAINT \"Invite_role_check_74d9b019\" CHECK (\"role\" IN ('platform_admin', 'company_admin', 'company_viewer'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Invite\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Invite\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Location",
+    "label": "Create table \"Location\"",
+    "summary": "Creates table \"Location\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Location"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Location\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Location\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Location\"",
+        "sql": "CREATE TABLE \"public\".\"Location\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"currency\" character varying(3) DEFAULT 'USD' NOT NULL,\n  \"externalIds\" json,\n  \"id\" text NOT NULL,\n  \"isActive\" bool DEFAULT true NOT NULL,\n  \"name\" text NOT NULL,\n  \"timezone\" text DEFAULT 'UTC' NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Location\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Location\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Order",
+    "label": "Create table \"Order\"",
+    "summary": "Creates table \"Order\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Order"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Order\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Order\"",
+        "sql": "CREATE TABLE \"public\".\"Order\" (\n  \"checkoutToken\" text,\n  \"connectorId\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"currency\" character varying(3) NOT NULL,\n  \"customerId\" text,\n  \"discountMinorUnits\" int8 DEFAULT '0'::int8 NOT NULL,\n  \"externalId\" text,\n  \"fxRateToReporting\" numeric,\n  \"grossMinorUnits\" int8 NOT NULL,\n  \"id\" text NOT NULL,\n  \"idempotencyKey\" text,\n  \"isNewCustomer\" bool DEFAULT false NOT NULL,\n  \"locationId\" text,\n  \"matchMethod\" text DEFAULT 'none' NOT NULL,\n  \"netMinorUnits\" int8 NOT NULL,\n  \"orderedAt\" timestamptz NOT NULL,\n  \"rawPayload\" json,\n  \"refundedMinorUnits\" int8 DEFAULT '0'::int8 NOT NULL,\n  \"reportingCurrency\" character varying(3),\n  \"status\" text DEFAULT 'paid' NOT NULL,\n  \"taxMinorUnits\" int8 DEFAULT '0'::int8 NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"Order_matchMethod_check_4a40748d\" CHECK (\"matchMethod\" IN ('token', 'click_id', 'email', 'phone', 'none')),\n  CONSTRAINT \"Order_status_check_c9ff30e9\" CHECK (\"status\" IN ('pending', 'paid', 'refunded', 'partially_refunded', 'voided'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Order\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.OrderItem",
+    "label": "Create table \"OrderItem\"",
+    "summary": "Creates table \"OrderItem\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "OrderItem"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"OrderItem\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"OrderItem\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"OrderItem\"",
+        "sql": "CREATE TABLE \"public\".\"OrderItem\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"currency\" character varying(3) NOT NULL,\n  \"externalId\" text,\n  \"id\" text NOT NULL,\n  \"name\" text NOT NULL,\n  \"orderId\" text NOT NULL,\n  \"quantity\" int4 DEFAULT 1 NOT NULL,\n  \"totalMinorUnits\" int8 NOT NULL,\n  \"unitMinorUnits\" int8 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"OrderItem\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"OrderItem\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.RawEvent",
+    "label": "Create table \"RawEvent\"",
+    "summary": "Creates table \"RawEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "RawEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"RawEvent\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"RawEvent\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"RawEvent\"",
+        "sql": "CREATE TABLE \"public\".\"RawEvent\" (\n  \"connectorId\" text,\n  \"error\" text,\n  \"eventType\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"payload\" json NOT NULL,\n  \"processedAt\" timestamptz,\n  \"receivedAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"replayCount\" int4 DEFAULT 0 NOT NULL,\n  \"source\" text NOT NULL,\n  \"status\" text DEFAULT 'pending' NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"RawEvent_status_check_aa7b9c78\" CHECK (\"status\" IN ('pending', 'processed', 'failed', 'replaying', 'dead'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"RawEvent\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"RawEvent\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Refund",
+    "label": "Create table \"Refund\"",
+    "summary": "Creates table \"Refund\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Refund"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Refund\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Refund\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Refund\"",
+        "sql": "CREATE TABLE \"public\".\"Refund\" (\n  \"amountMinorUnits\" int8 NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"currency\" character varying(3) NOT NULL,\n  \"externalId\" text,\n  \"id\" text NOT NULL,\n  \"idempotencyKey\" text,\n  \"orderId\" text NOT NULL,\n  \"reason\" text,\n  \"refundedAt\" timestamptz NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Refund\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Refund\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Session",
+    "label": "Create table \"Session\"",
+    "summary": "Creates table \"Session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Session\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Session\"",
+        "sql": "CREATE TABLE \"public\".\"Session\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"expiresAt\" timestamptz NOT NULL,\n  \"id\" text NOT NULL,\n  \"ip\" text,\n  \"lastSeenAt\" timestamptz,\n  \"refreshTokenHash\" text NOT NULL,\n  \"revokedAt\" timestamptz,\n  \"userAgent\" text,\n  \"userId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Session\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Site",
+    "label": "Create table \"Site\"",
+    "summary": "Creates table \"Site\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Site"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Site\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Site\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Site\"",
+        "sql": "CREATE TABLE \"public\".\"Site\" (\n  \"allowedOrigins\" text[] NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"domain\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"sdkSettings\" json,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"verificationMethod\" text,\n  \"verificationToken\" text,\n  \"verifiedAt\" timestamptz,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"Site_allowedOrigins_elem_not_null_d963e802\" CHECK (array_position(\"allowedOrigins\", NULL) IS NULL),\n  CONSTRAINT \"Site_verificationMethod_check_f6798e6a\" CHECK (\"verificationMethod\" IN ('dns_txt', 'meta_tag'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Site\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Site\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.SupportAccessSession",
+    "label": "Create table \"SupportAccessSession\"",
+    "summary": "Creates table \"SupportAccessSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "SupportAccessSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"SupportAccessSession\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"SupportAccessSession\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"SupportAccessSession\"",
+        "sql": "CREATE TABLE \"public\".\"SupportAccessSession\" (\n  \"adminUserId\" text NOT NULL,\n  \"endedAt\" timestamptz,\n  \"expiresAt\" timestamptz NOT NULL,\n  \"id\" text NOT NULL,\n  \"maskPii\" bool DEFAULT true NOT NULL,\n  \"reason\" text NOT NULL,\n  \"startedAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"SupportAccessSession\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"SupportAccessSession\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Touch",
+    "label": "Create table \"Touch\"",
+    "summary": "Creates table \"Touch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Touch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Touch\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Touch\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Touch\"",
+        "sql": "CREATE TABLE \"public\".\"Touch\" (\n  \"campaign\" text,\n  \"channel\" text,\n  \"content\" text,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"fbc\" text,\n  \"fbclid\" text,\n  \"fbp\" text,\n  \"ga\" text,\n  \"gclid\" text,\n  \"id\" text NOT NULL,\n  \"ip\" text,\n  \"landingPage\" text,\n  \"medium\" text,\n  \"msclkid\" text,\n  \"pageTitle\" text,\n  \"referrer\" text,\n  \"siteId\" text,\n  \"source\" text,\n  \"term\" text,\n  \"touchedAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"ttclid\" text,\n  \"userAgent\" text,\n  \"visitorId\" text NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Touch\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Touch\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.User",
+    "label": "Create table \"User\"",
+    "summary": "Creates table \"User\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "User"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"User\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"User\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"User\"",
+        "sql": "CREATE TABLE \"public\".\"User\" (\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"email\" text NOT NULL,\n  \"emailVerifiedAt\" timestamptz,\n  \"failedLoginCount\" int4 DEFAULT 0 NOT NULL,\n  \"id\" text NOT NULL,\n  \"lastLoginAt\" timestamptz,\n  \"lockedUntil\" timestamptz,\n  \"name\" text NOT NULL,\n  \"passwordHash\" text NOT NULL,\n  \"role\" text NOT NULL,\n  \"status\" text DEFAULT 'invited' NOT NULL,\n  \"twoFactorEnabled\" bool DEFAULT false NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"workspaceId\" text,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"User_role_check_74d9b019\" CHECK (\"role\" IN ('platform_admin', 'company_admin', 'company_viewer')),\n  CONSTRAINT \"User_status_check_f856bcca\" CHECK (\"status\" IN ('invited', 'active', 'deactivated'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"User\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"User\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.UserLocationAccess",
+    "label": "Create table \"UserLocationAccess\"",
+    "summary": "Creates table \"UserLocationAccess\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "UserLocationAccess"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"UserLocationAccess\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"UserLocationAccess\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"UserLocationAccess\"",
+        "sql": "CREATE TABLE \"public\".\"UserLocationAccess\" (\n  \"locationId\" text NOT NULL,\n  \"userId\" text NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"userId\", \"locationId\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"UserLocationAccess\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"UserLocationAccess\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Visitor",
+    "label": "Create table \"Visitor\"",
+    "summary": "Creates table \"Visitor\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Visitor"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Visitor\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Visitor\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Visitor\"",
+        "sql": "CREATE TABLE \"public\".\"Visitor\" (\n  \"customerId\" text,\n  \"firstSeenAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" text NOT NULL,\n  \"lastSeenAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"visitorId\" text NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Visitor\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Visitor\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.WebhookEndpoint",
+    "label": "Create table \"WebhookEndpoint\"",
+    "summary": "Creates table \"WebhookEndpoint\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "WebhookEndpoint"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"WebhookEndpoint\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"WebhookEndpoint\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"WebhookEndpoint\"",
+        "sql": "CREATE TABLE \"public\".\"WebhookEndpoint\" (\n  \"consecutiveFailures\" int4 DEFAULT 0 NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"disabledReason\" text,\n  \"eventTypes\" text[] NOT NULL,\n  \"id\" text NOT NULL,\n  \"isActive\" bool DEFAULT true NOT NULL,\n  \"signingSecretEnc\" bytea,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"url\" text NOT NULL,\n  \"workspaceId\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"WebhookEndpoint_eventTypes_elem_not_null_9d7fdd2b\" CHECK (array_position(\"eventTypes\", NULL) IS NULL)\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"WebhookEndpoint\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"WebhookEndpoint\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.Workspace",
+    "label": "Create table \"Workspace\"",
+    "summary": "Creates table \"Workspace\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "Workspace"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"Workspace\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Workspace\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"Workspace\"",
+        "sql": "CREATE TABLE \"public\".\"Workspace\" (\n  \"approvedAt\" timestamptz,\n  \"approvedBy\" text,\n  \"consentMode\" text DEFAULT 'off' NOT NULL,\n  \"country\" character varying(2) NOT NULL,\n  \"createdAt\" timestamptz DEFAULT (now()) NOT NULL,\n  \"dataRegion\" text,\n  \"defaultModel\" text DEFAULT 'last_non_direct' NOT NULL,\n  \"deletedAt\" timestamptz,\n  \"emailVerificationExpires\" timestamptz,\n  \"emailVerificationHash\" text,\n  \"id\" text NOT NULL,\n  \"industry\" text,\n  \"lookbackDays\" int4 DEFAULT 30 NOT NULL,\n  \"lookbackOverrides\" json,\n  \"name\" text NOT NULL,\n  \"plan\" text,\n  \"rawRetentionMonths\" int4 DEFAULT 13 NOT NULL,\n  \"reportingCurrency\" character varying(3) DEFAULT 'USD' NOT NULL,\n  \"slug\" text NOT NULL,\n  \"status\" text DEFAULT 'pending' NOT NULL,\n  \"suspendedReason\" text,\n  \"timezone\" text DEFAULT 'UTC' NOT NULL,\n  \"updatedAt\" timestamptz NOT NULL,\n  \"websiteUrl\" text,\n  \"weekStart\" int2 DEFAULT 1 NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"Workspace_consentMode_check_906800ff\" CHECK (\"consentMode\" IN ('off', 'opt_in', 'opt_out')),\n  CONSTRAINT \"Workspace_defaultModel_check_4744b886\" CHECK (\"defaultModel\" IN ('first_touch', 'last_touch', 'last_non_direct', 'linear', 'time_decay', 'position_based')),\n  CONSTRAINT \"Workspace_status_check_4dc0f300\" CHECK (\"status\" IN ('pending', 'active', 'suspended', 'closed'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"Workspace\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Workspace\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.ApiKey.ApiKey_keyHash_key",
+    "label": "Add unique constraint on \"ApiKey\" (keyHash)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "ApiKey_keyHash_key",
+        "table": "ApiKey"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"ApiKey_keyHash_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "ApiKey_keyHash_key",
+          "public",
+          "\"public\".\"ApiKey\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"ApiKey_keyHash_key\"",
+        "sql": "ALTER TABLE \"public\".\"ApiKey\" ADD CONSTRAINT \"ApiKey_keyHash_key\" UNIQUE (\"keyHash\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"ApiKey_keyHash_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "ApiKey_keyHash_key",
+          "public",
+          "\"public\".\"ApiKey\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.Booking.Booking_workspaceId_externalId_key",
+    "label": "Add unique constraint on \"Booking\" (workspaceId, externalId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "Booking_workspaceId_externalId_key",
+        "table": "Booking"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"Booking_workspaceId_externalId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Booking_workspaceId_externalId_key",
+          "public",
+          "\"public\".\"Booking\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"Booking_workspaceId_externalId_key\"",
+        "sql": "ALTER TABLE \"public\".\"Booking\" ADD CONSTRAINT \"Booking_workspaceId_externalId_key\" UNIQUE (\"workspaceId\", \"externalId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"Booking_workspaceId_externalId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Booking_workspaceId_externalId_key",
+          "public",
+          "\"public\".\"Booking\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.CheckoutSession.CheckoutSession_token_key",
+    "label": "Add unique constraint on \"CheckoutSession\" (token)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "CheckoutSession_token_key",
+        "table": "CheckoutSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"CheckoutSession_token_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "CheckoutSession_token_key",
+          "public",
+          "\"public\".\"CheckoutSession\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"CheckoutSession_token_key\"",
+        "sql": "ALTER TABLE \"public\".\"CheckoutSession\" ADD CONSTRAINT \"CheckoutSession_token_key\" UNIQUE (\"token\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"CheckoutSession_token_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "CheckoutSession_token_key",
+          "public",
+          "\"public\".\"CheckoutSession\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.Connector.Connector_publicId_key",
+    "label": "Add unique constraint on \"Connector\" (publicId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "Connector_publicId_key",
+        "table": "Connector"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"Connector_publicId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Connector_publicId_key",
+          "public",
+          "\"public\".\"Connector\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"Connector_publicId_key\"",
+        "sql": "ALTER TABLE \"public\".\"Connector\" ADD CONSTRAINT \"Connector_publicId_key\" UNIQUE (\"publicId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"Connector_publicId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Connector_publicId_key",
+          "public",
+          "\"public\".\"Connector\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.Invite.Invite_tokenHash_key",
+    "label": "Add unique constraint on \"Invite\" (tokenHash)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "Invite_tokenHash_key",
+        "table": "Invite"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"Invite_tokenHash_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Invite_tokenHash_key",
+          "public",
+          "\"public\".\"Invite\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"Invite_tokenHash_key\"",
+        "sql": "ALTER TABLE \"public\".\"Invite\" ADD CONSTRAINT \"Invite_tokenHash_key\" UNIQUE (\"tokenHash\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"Invite_tokenHash_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Invite_tokenHash_key",
+          "public",
+          "\"public\".\"Invite\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.Order.Order_workspaceId_externalId_key",
+    "label": "Add unique constraint on \"Order\" (workspaceId, externalId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "Order_workspaceId_externalId_key",
+        "table": "Order"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"Order_workspaceId_externalId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Order_workspaceId_externalId_key",
+          "public",
+          "\"public\".\"Order\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"Order_workspaceId_externalId_key\"",
+        "sql": "ALTER TABLE \"public\".\"Order\" ADD CONSTRAINT \"Order_workspaceId_externalId_key\" UNIQUE (\"workspaceId\", \"externalId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"Order_workspaceId_externalId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Order_workspaceId_externalId_key",
+          "public",
+          "\"public\".\"Order\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.Site.Site_workspaceId_domain_key",
+    "label": "Add unique constraint on \"Site\" (workspaceId, domain)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "Site_workspaceId_domain_key",
+        "table": "Site"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"Site_workspaceId_domain_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Site_workspaceId_domain_key",
+          "public",
+          "\"public\".\"Site\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"Site_workspaceId_domain_key\"",
+        "sql": "ALTER TABLE \"public\".\"Site\" ADD CONSTRAINT \"Site_workspaceId_domain_key\" UNIQUE (\"workspaceId\", \"domain\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"Site_workspaceId_domain_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Site_workspaceId_domain_key",
+          "public",
+          "\"public\".\"Site\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.User.User_email_key",
+    "label": "Add unique constraint on \"User\" (email)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "User_email_key",
+        "table": "User"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"User_email_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "User_email_key",
+          "public",
+          "\"public\".\"User\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"User_email_key\"",
+        "sql": "ALTER TABLE \"public\".\"User\" ADD CONSTRAINT \"User_email_key\" UNIQUE (\"email\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"User_email_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "User_email_key",
+          "public",
+          "\"public\".\"User\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.Visitor.Visitor_workspaceId_visitorId_key",
+    "label": "Add unique constraint on \"Visitor\" (workspaceId, visitorId)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "Visitor_workspaceId_visitorId_key",
+        "table": "Visitor"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"Visitor_workspaceId_visitorId_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Visitor_workspaceId_visitorId_key",
+          "public",
+          "\"public\".\"Visitor\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"Visitor_workspaceId_visitorId_key\"",
+        "sql": "ALTER TABLE \"public\".\"Visitor\" ADD CONSTRAINT \"Visitor_workspaceId_visitorId_key\" UNIQUE (\"workspaceId\", \"visitorId\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"Visitor_workspaceId_visitorId_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Visitor_workspaceId_visitorId_key",
+          "public",
+          "\"public\".\"Visitor\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unique.Workspace.Workspace_slug_key",
+    "label": "Add unique constraint on \"Workspace\" (slug)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "Workspace_slug_key",
+        "table": "Workspace"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"Workspace_slug_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Workspace_slug_key",
+          "public",
+          "\"public\".\"Workspace\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"Workspace_slug_key\"",
+        "sql": "ALTER TABLE \"public\".\"Workspace\" ADD CONSTRAINT \"Workspace_slug_key\" UNIQUE (\"slug\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"Workspace_slug_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Workspace_slug_key",
+          "public",
+          "\"public\".\"Workspace\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.ApiKey.ApiKey_siteId_idx_cabdc5ab",
+    "label": "Create index \"ApiKey_siteId_idx_cabdc5ab\" on \"ApiKey\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "ApiKey_siteId_idx_cabdc5ab",
+        "table": "ApiKey"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"ApiKey_siteId_idx_cabdc5ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ApiKey_siteId_idx_cabdc5ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"ApiKey_siteId_idx_cabdc5ab\"",
+        "sql": "CREATE INDEX \"ApiKey_siteId_idx_cabdc5ab\" ON \"public\".\"ApiKey\" (\"siteId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"ApiKey_siteId_idx_cabdc5ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ApiKey_siteId_idx_cabdc5ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.ApiKey.ApiKey_workspaceId_idx_ba65f874",
+    "label": "Create index \"ApiKey_workspaceId_idx_ba65f874\" on \"ApiKey\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "ApiKey_workspaceId_idx_ba65f874",
+        "table": "ApiKey"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"ApiKey_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ApiKey_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"ApiKey_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"ApiKey_workspaceId_idx_ba65f874\" ON \"public\".\"ApiKey\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"ApiKey_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ApiKey_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.AttributionCredit.AttributionCredit_bookingId_idx_17848f4a",
+    "label": "Create index \"AttributionCredit_bookingId_idx_17848f4a\" on \"AttributionCredit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "AttributionCredit_bookingId_idx_17848f4a",
+        "table": "AttributionCredit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"AttributionCredit_bookingId_idx_17848f4a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AttributionCredit_bookingId_idx_17848f4a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"AttributionCredit_bookingId_idx_17848f4a\"",
+        "sql": "CREATE INDEX \"AttributionCredit_bookingId_idx_17848f4a\" ON \"public\".\"AttributionCredit\" (\"bookingId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"AttributionCredit_bookingId_idx_17848f4a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AttributionCredit_bookingId_idx_17848f4a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.AttributionCredit.AttributionCredit_orderId_idx_d284871b",
+    "label": "Create index \"AttributionCredit_orderId_idx_d284871b\" on \"AttributionCredit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "AttributionCredit_orderId_idx_d284871b",
+        "table": "AttributionCredit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"AttributionCredit_orderId_idx_d284871b\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AttributionCredit_orderId_idx_d284871b\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"AttributionCredit_orderId_idx_d284871b\"",
+        "sql": "CREATE INDEX \"AttributionCredit_orderId_idx_d284871b\" ON \"public\".\"AttributionCredit\" (\"orderId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"AttributionCredit_orderId_idx_d284871b\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AttributionCredit_orderId_idx_d284871b\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.AttributionCredit.AttributionCredit_touchId_idx_44220f8d",
+    "label": "Create index \"AttributionCredit_touchId_idx_44220f8d\" on \"AttributionCredit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "AttributionCredit_touchId_idx_44220f8d",
+        "table": "AttributionCredit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"AttributionCredit_touchId_idx_44220f8d\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AttributionCredit_touchId_idx_44220f8d\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"AttributionCredit_touchId_idx_44220f8d\"",
+        "sql": "CREATE INDEX \"AttributionCredit_touchId_idx_44220f8d\" ON \"public\".\"AttributionCredit\" (\"touchId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"AttributionCredit_touchId_idx_44220f8d\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AttributionCredit_touchId_idx_44220f8d\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.AttributionCredit.AttributionCredit_workspaceId_idx_ba65f874",
+    "label": "Create index \"AttributionCredit_workspaceId_idx_ba65f874\" on \"AttributionCredit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "AttributionCredit_workspaceId_idx_ba65f874",
+        "table": "AttributionCredit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"AttributionCredit_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AttributionCredit_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"AttributionCredit_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"AttributionCredit_workspaceId_idx_ba65f874\" ON \"public\".\"AttributionCredit\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"AttributionCredit_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AttributionCredit_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.AuditLog.AuditLog_action_idx_cd0d2116",
+    "label": "Create index \"AuditLog_action_idx_cd0d2116\" on \"AuditLog\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "AuditLog_action_idx_cd0d2116",
+        "table": "AuditLog"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"AuditLog_action_idx_cd0d2116\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AuditLog_action_idx_cd0d2116\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"AuditLog_action_idx_cd0d2116\"",
+        "sql": "CREATE INDEX \"AuditLog_action_idx_cd0d2116\" ON \"public\".\"AuditLog\" (\"action\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"AuditLog_action_idx_cd0d2116\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AuditLog_action_idx_cd0d2116\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.AuditLog.AuditLog_actorUserId_idx_96dac96c",
+    "label": "Create index \"AuditLog_actorUserId_idx_96dac96c\" on \"AuditLog\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "AuditLog_actorUserId_idx_96dac96c",
+        "table": "AuditLog"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"AuditLog_actorUserId_idx_96dac96c\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AuditLog_actorUserId_idx_96dac96c\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"AuditLog_actorUserId_idx_96dac96c\"",
+        "sql": "CREATE INDEX \"AuditLog_actorUserId_idx_96dac96c\" ON \"public\".\"AuditLog\" (\"actorUserId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"AuditLog_actorUserId_idx_96dac96c\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AuditLog_actorUserId_idx_96dac96c\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.AuditLog.AuditLog_workspaceId_idx_ba65f874",
+    "label": "Create index \"AuditLog_workspaceId_idx_ba65f874\" on \"AuditLog\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "AuditLog_workspaceId_idx_ba65f874",
+        "table": "AuditLog"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"AuditLog_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AuditLog_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"AuditLog_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"AuditLog_workspaceId_idx_ba65f874\" ON \"public\".\"AuditLog\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"AuditLog_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"AuditLog_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Booking.Booking_appointmentStartAt_idx_6063ce55",
+    "label": "Create index \"Booking_appointmentStartAt_idx_6063ce55\" on \"Booking\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Booking_appointmentStartAt_idx_6063ce55",
+        "table": "Booking"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Booking_appointmentStartAt_idx_6063ce55\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking_appointmentStartAt_idx_6063ce55\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Booking_appointmentStartAt_idx_6063ce55\"",
+        "sql": "CREATE INDEX \"Booking_appointmentStartAt_idx_6063ce55\" ON \"public\".\"Booking\" (\"appointmentStartAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Booking_appointmentStartAt_idx_6063ce55\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking_appointmentStartAt_idx_6063ce55\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Booking.Booking_connectorId_idx_a980b131",
+    "label": "Create index \"Booking_connectorId_idx_a980b131\" on \"Booking\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Booking_connectorId_idx_a980b131",
+        "table": "Booking"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Booking_connectorId_idx_a980b131\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking_connectorId_idx_a980b131\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Booking_connectorId_idx_a980b131\"",
+        "sql": "CREATE INDEX \"Booking_connectorId_idx_a980b131\" ON \"public\".\"Booking\" (\"connectorId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Booking_connectorId_idx_a980b131\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking_connectorId_idx_a980b131\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Booking.Booking_customerId_idx_b2a8a46c",
+    "label": "Create index \"Booking_customerId_idx_b2a8a46c\" on \"Booking\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Booking_customerId_idx_b2a8a46c",
+        "table": "Booking"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Booking_customerId_idx_b2a8a46c\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking_customerId_idx_b2a8a46c\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Booking_customerId_idx_b2a8a46c\"",
+        "sql": "CREATE INDEX \"Booking_customerId_idx_b2a8a46c\" ON \"public\".\"Booking\" (\"customerId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Booking_customerId_idx_b2a8a46c\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking_customerId_idx_b2a8a46c\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Booking.Booking_locationId_idx_7aae3038",
+    "label": "Create index \"Booking_locationId_idx_7aae3038\" on \"Booking\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Booking_locationId_idx_7aae3038",
+        "table": "Booking"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Booking_locationId_idx_7aae3038\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking_locationId_idx_7aae3038\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Booking_locationId_idx_7aae3038\"",
+        "sql": "CREATE INDEX \"Booking_locationId_idx_7aae3038\" ON \"public\".\"Booking\" (\"locationId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Booking_locationId_idx_7aae3038\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking_locationId_idx_7aae3038\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Booking.Booking_workspaceId_idx_ba65f874",
+    "label": "Create index \"Booking_workspaceId_idx_ba65f874\" on \"Booking\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Booking_workspaceId_idx_ba65f874",
+        "table": "Booking"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Booking_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Booking_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"Booking_workspaceId_idx_ba65f874\" ON \"public\".\"Booking\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Booking_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Booking_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.BookingStatusHistory.BookingStatusHistory_bookingId_idx_17848f4a",
+    "label": "Create index \"BookingStatusHistory_bookingId_idx_17848f4a\" on \"BookingStatusHistory\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "BookingStatusHistory_bookingId_idx_17848f4a",
+        "table": "BookingStatusHistory"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"BookingStatusHistory_bookingId_idx_17848f4a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"BookingStatusHistory_bookingId_idx_17848f4a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"BookingStatusHistory_bookingId_idx_17848f4a\"",
+        "sql": "CREATE INDEX \"BookingStatusHistory_bookingId_idx_17848f4a\" ON \"public\".\"BookingStatusHistory\" (\"bookingId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"BookingStatusHistory_bookingId_idx_17848f4a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"BookingStatusHistory_bookingId_idx_17848f4a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.ChannelMappingRule.ChannelMappingRule_workspaceId_idx_ba65f874",
+    "label": "Create index \"ChannelMappingRule_workspaceId_idx_ba65f874\" on \"ChannelMappingRule\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "ChannelMappingRule_workspaceId_idx_ba65f874",
+        "table": "ChannelMappingRule"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"ChannelMappingRule_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ChannelMappingRule_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"ChannelMappingRule_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"ChannelMappingRule_workspaceId_idx_ba65f874\" ON \"public\".\"ChannelMappingRule\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"ChannelMappingRule_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"ChannelMappingRule_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.CheckoutSession.CheckoutSession_token_idx_8b25281e",
+    "label": "Create index \"CheckoutSession_token_idx_8b25281e\" on \"CheckoutSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "CheckoutSession_token_idx_8b25281e",
+        "table": "CheckoutSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"CheckoutSession_token_idx_8b25281e\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"CheckoutSession_token_idx_8b25281e\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"CheckoutSession_token_idx_8b25281e\"",
+        "sql": "CREATE INDEX \"CheckoutSession_token_idx_8b25281e\" ON \"public\".\"CheckoutSession\" (\"token\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"CheckoutSession_token_idx_8b25281e\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"CheckoutSession_token_idx_8b25281e\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.CheckoutSession.CheckoutSession_visitorId_idx_9d3ff46a",
+    "label": "Create index \"CheckoutSession_visitorId_idx_9d3ff46a\" on \"CheckoutSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "CheckoutSession_visitorId_idx_9d3ff46a",
+        "table": "CheckoutSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"CheckoutSession_visitorId_idx_9d3ff46a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"CheckoutSession_visitorId_idx_9d3ff46a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"CheckoutSession_visitorId_idx_9d3ff46a\"",
+        "sql": "CREATE INDEX \"CheckoutSession_visitorId_idx_9d3ff46a\" ON \"public\".\"CheckoutSession\" (\"visitorId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"CheckoutSession_visitorId_idx_9d3ff46a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"CheckoutSession_visitorId_idx_9d3ff46a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.CheckoutSession.CheckoutSession_workspaceId_idx_ba65f874",
+    "label": "Create index \"CheckoutSession_workspaceId_idx_ba65f874\" on \"CheckoutSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "CheckoutSession_workspaceId_idx_ba65f874",
+        "table": "CheckoutSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"CheckoutSession_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"CheckoutSession_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"CheckoutSession_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"CheckoutSession_workspaceId_idx_ba65f874\" ON \"public\".\"CheckoutSession\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"CheckoutSession_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"CheckoutSession_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Connector.Connector_workspaceId_idx_ba65f874",
+    "label": "Create index \"Connector_workspaceId_idx_ba65f874\" on \"Connector\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Connector_workspaceId_idx_ba65f874",
+        "table": "Connector"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Connector_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Connector_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Connector_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"Connector_workspaceId_idx_ba65f874\" ON \"public\".\"Connector\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Connector_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Connector_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Customer.Customer_emailHash_idx_9b6f176d",
+    "label": "Create index \"Customer_emailHash_idx_9b6f176d\" on \"Customer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Customer_emailHash_idx_9b6f176d",
+        "table": "Customer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Customer_emailHash_idx_9b6f176d\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Customer_emailHash_idx_9b6f176d\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Customer_emailHash_idx_9b6f176d\"",
+        "sql": "CREATE INDEX \"Customer_emailHash_idx_9b6f176d\" ON \"public\".\"Customer\" (\"emailHash\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Customer_emailHash_idx_9b6f176d\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Customer_emailHash_idx_9b6f176d\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Customer.Customer_mergedIntoId_idx_470bd53d",
+    "label": "Create index \"Customer_mergedIntoId_idx_470bd53d\" on \"Customer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Customer_mergedIntoId_idx_470bd53d",
+        "table": "Customer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Customer_mergedIntoId_idx_470bd53d\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Customer_mergedIntoId_idx_470bd53d\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Customer_mergedIntoId_idx_470bd53d\"",
+        "sql": "CREATE INDEX \"Customer_mergedIntoId_idx_470bd53d\" ON \"public\".\"Customer\" (\"mergedIntoId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Customer_mergedIntoId_idx_470bd53d\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Customer_mergedIntoId_idx_470bd53d\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Customer.Customer_phoneHash_idx_846afe22",
+    "label": "Create index \"Customer_phoneHash_idx_846afe22\" on \"Customer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Customer_phoneHash_idx_846afe22",
+        "table": "Customer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Customer_phoneHash_idx_846afe22\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Customer_phoneHash_idx_846afe22\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Customer_phoneHash_idx_846afe22\"",
+        "sql": "CREATE INDEX \"Customer_phoneHash_idx_846afe22\" ON \"public\".\"Customer\" (\"phoneHash\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Customer_phoneHash_idx_846afe22\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Customer_phoneHash_idx_846afe22\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Customer.Customer_workspaceId_idx_ba65f874",
+    "label": "Create index \"Customer_workspaceId_idx_ba65f874\" on \"Customer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Customer_workspaceId_idx_ba65f874",
+        "table": "Customer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Customer_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Customer_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Customer_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"Customer_workspaceId_idx_ba65f874\" ON \"public\".\"Customer\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Customer_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Customer_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Invite.Invite_invitedBy_idx_8266eaa5",
+    "label": "Create index \"Invite_invitedBy_idx_8266eaa5\" on \"Invite\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Invite_invitedBy_idx_8266eaa5",
+        "table": "Invite"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Invite_invitedBy_idx_8266eaa5\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Invite_invitedBy_idx_8266eaa5\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Invite_invitedBy_idx_8266eaa5\"",
+        "sql": "CREATE INDEX \"Invite_invitedBy_idx_8266eaa5\" ON \"public\".\"Invite\" (\"invitedBy\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Invite_invitedBy_idx_8266eaa5\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Invite_invitedBy_idx_8266eaa5\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Invite.Invite_workspaceId_idx_ba65f874",
+    "label": "Create index \"Invite_workspaceId_idx_ba65f874\" on \"Invite\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Invite_workspaceId_idx_ba65f874",
+        "table": "Invite"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Invite_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Invite_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Invite_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"Invite_workspaceId_idx_ba65f874\" ON \"public\".\"Invite\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Invite_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Invite_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Location.Location_workspaceId_idx_ba65f874",
+    "label": "Create index \"Location_workspaceId_idx_ba65f874\" on \"Location\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Location_workspaceId_idx_ba65f874",
+        "table": "Location"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Location_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Location_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Location_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"Location_workspaceId_idx_ba65f874\" ON \"public\".\"Location\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Location_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Location_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Order.Order_connectorId_idx_a980b131",
+    "label": "Create index \"Order_connectorId_idx_a980b131\" on \"Order\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Order_connectorId_idx_a980b131",
+        "table": "Order"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Order_connectorId_idx_a980b131\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order_connectorId_idx_a980b131\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Order_connectorId_idx_a980b131\"",
+        "sql": "CREATE INDEX \"Order_connectorId_idx_a980b131\" ON \"public\".\"Order\" (\"connectorId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Order_connectorId_idx_a980b131\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order_connectorId_idx_a980b131\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Order.Order_customerId_idx_b2a8a46c",
+    "label": "Create index \"Order_customerId_idx_b2a8a46c\" on \"Order\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Order_customerId_idx_b2a8a46c",
+        "table": "Order"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Order_customerId_idx_b2a8a46c\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order_customerId_idx_b2a8a46c\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Order_customerId_idx_b2a8a46c\"",
+        "sql": "CREATE INDEX \"Order_customerId_idx_b2a8a46c\" ON \"public\".\"Order\" (\"customerId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Order_customerId_idx_b2a8a46c\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order_customerId_idx_b2a8a46c\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Order.Order_locationId_idx_7aae3038",
+    "label": "Create index \"Order_locationId_idx_7aae3038\" on \"Order\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Order_locationId_idx_7aae3038",
+        "table": "Order"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Order_locationId_idx_7aae3038\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order_locationId_idx_7aae3038\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Order_locationId_idx_7aae3038\"",
+        "sql": "CREATE INDEX \"Order_locationId_idx_7aae3038\" ON \"public\".\"Order\" (\"locationId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Order_locationId_idx_7aae3038\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order_locationId_idx_7aae3038\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Order.Order_orderedAt_idx_8975db31",
+    "label": "Create index \"Order_orderedAt_idx_8975db31\" on \"Order\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Order_orderedAt_idx_8975db31",
+        "table": "Order"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Order_orderedAt_idx_8975db31\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order_orderedAt_idx_8975db31\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Order_orderedAt_idx_8975db31\"",
+        "sql": "CREATE INDEX \"Order_orderedAt_idx_8975db31\" ON \"public\".\"Order\" (\"orderedAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Order_orderedAt_idx_8975db31\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order_orderedAt_idx_8975db31\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Order.Order_workspaceId_idx_ba65f874",
+    "label": "Create index \"Order_workspaceId_idx_ba65f874\" on \"Order\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Order_workspaceId_idx_ba65f874",
+        "table": "Order"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Order_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Order_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"Order_workspaceId_idx_ba65f874\" ON \"public\".\"Order\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Order_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Order_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.OrderItem.OrderItem_orderId_idx_d284871b",
+    "label": "Create index \"OrderItem_orderId_idx_d284871b\" on \"OrderItem\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "OrderItem_orderId_idx_d284871b",
+        "table": "OrderItem"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"OrderItem_orderId_idx_d284871b\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"OrderItem_orderId_idx_d284871b\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"OrderItem_orderId_idx_d284871b\"",
+        "sql": "CREATE INDEX \"OrderItem_orderId_idx_d284871b\" ON \"public\".\"OrderItem\" (\"orderId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"OrderItem_orderId_idx_d284871b\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"OrderItem_orderId_idx_d284871b\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.RawEvent.RawEvent_connectorId_idx_a980b131",
+    "label": "Create index \"RawEvent_connectorId_idx_a980b131\" on \"RawEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "RawEvent_connectorId_idx_a980b131",
+        "table": "RawEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"RawEvent_connectorId_idx_a980b131\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"RawEvent_connectorId_idx_a980b131\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"RawEvent_connectorId_idx_a980b131\"",
+        "sql": "CREATE INDEX \"RawEvent_connectorId_idx_a980b131\" ON \"public\".\"RawEvent\" (\"connectorId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"RawEvent_connectorId_idx_a980b131\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"RawEvent_connectorId_idx_a980b131\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.RawEvent.RawEvent_status_idx_e98638ab",
+    "label": "Create index \"RawEvent_status_idx_e98638ab\" on \"RawEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "RawEvent_status_idx_e98638ab",
+        "table": "RawEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"RawEvent_status_idx_e98638ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"RawEvent_status_idx_e98638ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"RawEvent_status_idx_e98638ab\"",
+        "sql": "CREATE INDEX \"RawEvent_status_idx_e98638ab\" ON \"public\".\"RawEvent\" (\"status\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"RawEvent_status_idx_e98638ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"RawEvent_status_idx_e98638ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.RawEvent.RawEvent_workspaceId_idx_ba65f874",
+    "label": "Create index \"RawEvent_workspaceId_idx_ba65f874\" on \"RawEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "RawEvent_workspaceId_idx_ba65f874",
+        "table": "RawEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"RawEvent_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"RawEvent_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"RawEvent_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"RawEvent_workspaceId_idx_ba65f874\" ON \"public\".\"RawEvent\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"RawEvent_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"RawEvent_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Refund.Refund_orderId_idx_d284871b",
+    "label": "Create index \"Refund_orderId_idx_d284871b\" on \"Refund\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Refund_orderId_idx_d284871b",
+        "table": "Refund"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Refund_orderId_idx_d284871b\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Refund_orderId_idx_d284871b\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Refund_orderId_idx_d284871b\"",
+        "sql": "CREATE INDEX \"Refund_orderId_idx_d284871b\" ON \"public\".\"Refund\" (\"orderId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Refund_orderId_idx_d284871b\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Refund_orderId_idx_d284871b\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Refund.Refund_workspaceId_idx_ba65f874",
+    "label": "Create index \"Refund_workspaceId_idx_ba65f874\" on \"Refund\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Refund_workspaceId_idx_ba65f874",
+        "table": "Refund"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Refund_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Refund_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Refund_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"Refund_workspaceId_idx_ba65f874\" ON \"public\".\"Refund\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Refund_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Refund_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Session.Session_userId_idx_a489d58a",
+    "label": "Create index \"Session_userId_idx_a489d58a\" on \"Session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Session_userId_idx_a489d58a",
+        "table": "Session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Session_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Session_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Session_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"Session_userId_idx_a489d58a\" ON \"public\".\"Session\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Session_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Session_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Site.Site_workspaceId_idx_ba65f874",
+    "label": "Create index \"Site_workspaceId_idx_ba65f874\" on \"Site\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Site_workspaceId_idx_ba65f874",
+        "table": "Site"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Site_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Site_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Site_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"Site_workspaceId_idx_ba65f874\" ON \"public\".\"Site\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Site_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Site_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.SupportAccessSession.SupportAccessSession_workspaceId_idx_ba65f874",
+    "label": "Create index \"SupportAccessSession_workspaceId_idx_ba65f874\" on \"SupportAccessSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "SupportAccessSession_workspaceId_idx_ba65f874",
+        "table": "SupportAccessSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"SupportAccessSession_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"SupportAccessSession_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"SupportAccessSession_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"SupportAccessSession_workspaceId_idx_ba65f874\" ON \"public\".\"SupportAccessSession\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"SupportAccessSession_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"SupportAccessSession_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Touch.Touch_siteId_idx_cabdc5ab",
+    "label": "Create index \"Touch_siteId_idx_cabdc5ab\" on \"Touch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Touch_siteId_idx_cabdc5ab",
+        "table": "Touch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Touch_siteId_idx_cabdc5ab\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Touch_siteId_idx_cabdc5ab\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Touch_siteId_idx_cabdc5ab\"",
+        "sql": "CREATE INDEX \"Touch_siteId_idx_cabdc5ab\" ON \"public\".\"Touch\" (\"siteId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Touch_siteId_idx_cabdc5ab\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Touch_siteId_idx_cabdc5ab\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Touch.Touch_touchedAt_idx_b2a4180a",
+    "label": "Create index \"Touch_touchedAt_idx_b2a4180a\" on \"Touch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Touch_touchedAt_idx_b2a4180a",
+        "table": "Touch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Touch_touchedAt_idx_b2a4180a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Touch_touchedAt_idx_b2a4180a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Touch_touchedAt_idx_b2a4180a\"",
+        "sql": "CREATE INDEX \"Touch_touchedAt_idx_b2a4180a\" ON \"public\".\"Touch\" (\"touchedAt\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Touch_touchedAt_idx_b2a4180a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Touch_touchedAt_idx_b2a4180a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Touch.Touch_visitorId_idx_9d3ff46a",
+    "label": "Create index \"Touch_visitorId_idx_9d3ff46a\" on \"Touch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Touch_visitorId_idx_9d3ff46a",
+        "table": "Touch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Touch_visitorId_idx_9d3ff46a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Touch_visitorId_idx_9d3ff46a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Touch_visitorId_idx_9d3ff46a\"",
+        "sql": "CREATE INDEX \"Touch_visitorId_idx_9d3ff46a\" ON \"public\".\"Touch\" (\"visitorId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Touch_visitorId_idx_9d3ff46a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Touch_visitorId_idx_9d3ff46a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Touch.Touch_workspaceId_idx_ba65f874",
+    "label": "Create index \"Touch_workspaceId_idx_ba65f874\" on \"Touch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Touch_workspaceId_idx_ba65f874",
+        "table": "Touch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Touch_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Touch_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Touch_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"Touch_workspaceId_idx_ba65f874\" ON \"public\".\"Touch\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Touch_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Touch_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.User.User_workspaceId_idx_ba65f874",
+    "label": "Create index \"User_workspaceId_idx_ba65f874\" on \"User\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "User_workspaceId_idx_ba65f874",
+        "table": "User"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"User_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"User_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"User_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"User_workspaceId_idx_ba65f874\" ON \"public\".\"User\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"User_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"User_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.UserLocationAccess.UserLocationAccess_locationId_idx_7aae3038",
+    "label": "Create index \"UserLocationAccess_locationId_idx_7aae3038\" on \"UserLocationAccess\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "UserLocationAccess_locationId_idx_7aae3038",
+        "table": "UserLocationAccess"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"UserLocationAccess_locationId_idx_7aae3038\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"UserLocationAccess_locationId_idx_7aae3038\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"UserLocationAccess_locationId_idx_7aae3038\"",
+        "sql": "CREATE INDEX \"UserLocationAccess_locationId_idx_7aae3038\" ON \"public\".\"UserLocationAccess\" (\"locationId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"UserLocationAccess_locationId_idx_7aae3038\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"UserLocationAccess_locationId_idx_7aae3038\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.UserLocationAccess.UserLocationAccess_userId_idx_a489d58a",
+    "label": "Create index \"UserLocationAccess_userId_idx_a489d58a\" on \"UserLocationAccess\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "UserLocationAccess_userId_idx_a489d58a",
+        "table": "UserLocationAccess"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"UserLocationAccess_userId_idx_a489d58a\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"UserLocationAccess_userId_idx_a489d58a\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"UserLocationAccess_userId_idx_a489d58a\"",
+        "sql": "CREATE INDEX \"UserLocationAccess_userId_idx_a489d58a\" ON \"public\".\"UserLocationAccess\" (\"userId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"UserLocationAccess_userId_idx_a489d58a\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"UserLocationAccess_userId_idx_a489d58a\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.UserLocationAccess.UserLocationAccess_workspaceId_idx_ba65f874",
+    "label": "Create index \"UserLocationAccess_workspaceId_idx_ba65f874\" on \"UserLocationAccess\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "UserLocationAccess_workspaceId_idx_ba65f874",
+        "table": "UserLocationAccess"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"UserLocationAccess_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"UserLocationAccess_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"UserLocationAccess_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"UserLocationAccess_workspaceId_idx_ba65f874\" ON \"public\".\"UserLocationAccess\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"UserLocationAccess_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"UserLocationAccess_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Visitor.Visitor_customerId_idx_b2a8a46c",
+    "label": "Create index \"Visitor_customerId_idx_b2a8a46c\" on \"Visitor\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Visitor_customerId_idx_b2a8a46c",
+        "table": "Visitor"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Visitor_customerId_idx_b2a8a46c\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Visitor_customerId_idx_b2a8a46c\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Visitor_customerId_idx_b2a8a46c\"",
+        "sql": "CREATE INDEX \"Visitor_customerId_idx_b2a8a46c\" ON \"public\".\"Visitor\" (\"customerId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Visitor_customerId_idx_b2a8a46c\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Visitor_customerId_idx_b2a8a46c\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.Visitor.Visitor_workspaceId_idx_ba65f874",
+    "label": "Create index \"Visitor_workspaceId_idx_ba65f874\" on \"Visitor\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "Visitor_workspaceId_idx_ba65f874",
+        "table": "Visitor"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"Visitor_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Visitor_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"Visitor_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"Visitor_workspaceId_idx_ba65f874\" ON \"public\".\"Visitor\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"Visitor_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"Visitor_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.WebhookEndpoint.WebhookEndpoint_workspaceId_idx_ba65f874",
+    "label": "Create index \"WebhookEndpoint_workspaceId_idx_ba65f874\" on \"WebhookEndpoint\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "WebhookEndpoint_workspaceId_idx_ba65f874",
+        "table": "WebhookEndpoint"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"WebhookEndpoint_workspaceId_idx_ba65f874\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"WebhookEndpoint_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"WebhookEndpoint_workspaceId_idx_ba65f874\"",
+        "sql": "CREATE INDEX \"WebhookEndpoint_workspaceId_idx_ba65f874\" ON \"public\".\"WebhookEndpoint\" (\"workspaceId\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"WebhookEndpoint_workspaceId_idx_ba65f874\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"WebhookEndpoint_workspaceId_idx_ba65f874\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.ApiKey.ApiKey_workspaceId_fkey",
+    "label": "Add foreign key \"ApiKey_workspaceId_fkey\" on \"ApiKey\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "ApiKey_workspaceId_fkey",
+        "table": "ApiKey"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"ApiKey_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "ApiKey_workspaceId_fkey",
+          "public",
+          "\"public\".\"ApiKey\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"ApiKey_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"ApiKey\"\nADD CONSTRAINT \"ApiKey_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"ApiKey_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "ApiKey_workspaceId_fkey",
+          "public",
+          "\"public\".\"ApiKey\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.ApiKey.ApiKey_siteId_fkey",
+    "label": "Add foreign key \"ApiKey_siteId_fkey\" on \"ApiKey\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "ApiKey_siteId_fkey",
+        "table": "ApiKey"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"ApiKey_siteId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "ApiKey_siteId_fkey",
+          "public",
+          "\"public\".\"ApiKey\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"ApiKey_siteId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"ApiKey\"\nADD CONSTRAINT \"ApiKey_siteId_fkey\"\nFOREIGN KEY (\"siteId\")\nREFERENCES \"public\".\"Site\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"ApiKey_siteId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "ApiKey_siteId_fkey",
+          "public",
+          "\"public\".\"ApiKey\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.AttributionCredit.AttributionCredit_workspaceId_fkey",
+    "label": "Add foreign key \"AttributionCredit_workspaceId_fkey\" on \"AttributionCredit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "AttributionCredit_workspaceId_fkey",
+        "table": "AttributionCredit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"AttributionCredit_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "AttributionCredit_workspaceId_fkey",
+          "public",
+          "\"public\".\"AttributionCredit\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"AttributionCredit_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"AttributionCredit\"\nADD CONSTRAINT \"AttributionCredit_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"AttributionCredit_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "AttributionCredit_workspaceId_fkey",
+          "public",
+          "\"public\".\"AttributionCredit\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.AttributionCredit.AttributionCredit_orderId_fkey",
+    "label": "Add foreign key \"AttributionCredit_orderId_fkey\" on \"AttributionCredit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "AttributionCredit_orderId_fkey",
+        "table": "AttributionCredit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"AttributionCredit_orderId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "AttributionCredit_orderId_fkey",
+          "public",
+          "\"public\".\"AttributionCredit\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"AttributionCredit_orderId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"AttributionCredit\"\nADD CONSTRAINT \"AttributionCredit_orderId_fkey\"\nFOREIGN KEY (\"orderId\")\nREFERENCES \"public\".\"Order\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"AttributionCredit_orderId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "AttributionCredit_orderId_fkey",
+          "public",
+          "\"public\".\"AttributionCredit\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.AttributionCredit.AttributionCredit_bookingId_fkey",
+    "label": "Add foreign key \"AttributionCredit_bookingId_fkey\" on \"AttributionCredit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "AttributionCredit_bookingId_fkey",
+        "table": "AttributionCredit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"AttributionCredit_bookingId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "AttributionCredit_bookingId_fkey",
+          "public",
+          "\"public\".\"AttributionCredit\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"AttributionCredit_bookingId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"AttributionCredit\"\nADD CONSTRAINT \"AttributionCredit_bookingId_fkey\"\nFOREIGN KEY (\"bookingId\")\nREFERENCES \"public\".\"Booking\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"AttributionCredit_bookingId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "AttributionCredit_bookingId_fkey",
+          "public",
+          "\"public\".\"AttributionCredit\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.AttributionCredit.AttributionCredit_touchId_fkey",
+    "label": "Add foreign key \"AttributionCredit_touchId_fkey\" on \"AttributionCredit\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "AttributionCredit_touchId_fkey",
+        "table": "AttributionCredit"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"AttributionCredit_touchId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "AttributionCredit_touchId_fkey",
+          "public",
+          "\"public\".\"AttributionCredit\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"AttributionCredit_touchId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"AttributionCredit\"\nADD CONSTRAINT \"AttributionCredit_touchId_fkey\"\nFOREIGN KEY (\"touchId\")\nREFERENCES \"public\".\"Touch\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"AttributionCredit_touchId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "AttributionCredit_touchId_fkey",
+          "public",
+          "\"public\".\"AttributionCredit\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.AuditLog.AuditLog_workspaceId_fkey",
+    "label": "Add foreign key \"AuditLog_workspaceId_fkey\" on \"AuditLog\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "AuditLog_workspaceId_fkey",
+        "table": "AuditLog"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"AuditLog_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "AuditLog_workspaceId_fkey",
+          "public",
+          "\"public\".\"AuditLog\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"AuditLog_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"AuditLog\"\nADD CONSTRAINT \"AuditLog_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"AuditLog_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "AuditLog_workspaceId_fkey",
+          "public",
+          "\"public\".\"AuditLog\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Booking.Booking_workspaceId_fkey",
+    "label": "Add foreign key \"Booking_workspaceId_fkey\" on \"Booking\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Booking_workspaceId_fkey",
+        "table": "Booking"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Booking_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Booking_workspaceId_fkey",
+          "public",
+          "\"public\".\"Booking\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Booking_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Booking\"\nADD CONSTRAINT \"Booking_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Booking_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Booking_workspaceId_fkey",
+          "public",
+          "\"public\".\"Booking\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Booking.Booking_locationId_fkey",
+    "label": "Add foreign key \"Booking_locationId_fkey\" on \"Booking\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Booking_locationId_fkey",
+        "table": "Booking"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Booking_locationId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Booking_locationId_fkey",
+          "public",
+          "\"public\".\"Booking\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Booking_locationId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Booking\"\nADD CONSTRAINT \"Booking_locationId_fkey\"\nFOREIGN KEY (\"locationId\")\nREFERENCES \"public\".\"Location\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Booking_locationId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Booking_locationId_fkey",
+          "public",
+          "\"public\".\"Booking\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Booking.Booking_customerId_fkey",
+    "label": "Add foreign key \"Booking_customerId_fkey\" on \"Booking\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Booking_customerId_fkey",
+        "table": "Booking"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Booking_customerId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Booking_customerId_fkey",
+          "public",
+          "\"public\".\"Booking\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Booking_customerId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Booking\"\nADD CONSTRAINT \"Booking_customerId_fkey\"\nFOREIGN KEY (\"customerId\")\nREFERENCES \"public\".\"Customer\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Booking_customerId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Booking_customerId_fkey",
+          "public",
+          "\"public\".\"Booking\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Booking.Booking_connectorId_fkey",
+    "label": "Add foreign key \"Booking_connectorId_fkey\" on \"Booking\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Booking_connectorId_fkey",
+        "table": "Booking"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Booking_connectorId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Booking_connectorId_fkey",
+          "public",
+          "\"public\".\"Booking\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Booking_connectorId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Booking\"\nADD CONSTRAINT \"Booking_connectorId_fkey\"\nFOREIGN KEY (\"connectorId\")\nREFERENCES \"public\".\"Connector\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Booking_connectorId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Booking_connectorId_fkey",
+          "public",
+          "\"public\".\"Booking\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.BookingStatusHistory.BookingStatusHistory_bookingId_fkey",
+    "label": "Add foreign key \"BookingStatusHistory_bookingId_fkey\" on \"BookingStatusHistory\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "BookingStatusHistory_bookingId_fkey",
+        "table": "BookingStatusHistory"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"BookingStatusHistory_bookingId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "BookingStatusHistory_bookingId_fkey",
+          "public",
+          "\"public\".\"BookingStatusHistory\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"BookingStatusHistory_bookingId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"BookingStatusHistory\"\nADD CONSTRAINT \"BookingStatusHistory_bookingId_fkey\"\nFOREIGN KEY (\"bookingId\")\nREFERENCES \"public\".\"Booking\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"BookingStatusHistory_bookingId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "BookingStatusHistory_bookingId_fkey",
+          "public",
+          "\"public\".\"BookingStatusHistory\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.ChannelMappingRule.ChannelMappingRule_workspaceId_fkey",
+    "label": "Add foreign key \"ChannelMappingRule_workspaceId_fkey\" on \"ChannelMappingRule\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "ChannelMappingRule_workspaceId_fkey",
+        "table": "ChannelMappingRule"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"ChannelMappingRule_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "ChannelMappingRule_workspaceId_fkey",
+          "public",
+          "\"public\".\"ChannelMappingRule\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"ChannelMappingRule_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"ChannelMappingRule\"\nADD CONSTRAINT \"ChannelMappingRule_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"ChannelMappingRule_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "ChannelMappingRule_workspaceId_fkey",
+          "public",
+          "\"public\".\"ChannelMappingRule\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.CheckoutSession.CheckoutSession_workspaceId_fkey",
+    "label": "Add foreign key \"CheckoutSession_workspaceId_fkey\" on \"CheckoutSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "CheckoutSession_workspaceId_fkey",
+        "table": "CheckoutSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"CheckoutSession_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "CheckoutSession_workspaceId_fkey",
+          "public",
+          "\"public\".\"CheckoutSession\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"CheckoutSession_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"CheckoutSession\"\nADD CONSTRAINT \"CheckoutSession_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"CheckoutSession_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "CheckoutSession_workspaceId_fkey",
+          "public",
+          "\"public\".\"CheckoutSession\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.CheckoutSession.CheckoutSession_visitorId_fkey",
+    "label": "Add foreign key \"CheckoutSession_visitorId_fkey\" on \"CheckoutSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "CheckoutSession_visitorId_fkey",
+        "table": "CheckoutSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"CheckoutSession_visitorId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "CheckoutSession_visitorId_fkey",
+          "public",
+          "\"public\".\"CheckoutSession\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"CheckoutSession_visitorId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"CheckoutSession\"\nADD CONSTRAINT \"CheckoutSession_visitorId_fkey\"\nFOREIGN KEY (\"visitorId\")\nREFERENCES \"public\".\"Visitor\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"CheckoutSession_visitorId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "CheckoutSession_visitorId_fkey",
+          "public",
+          "\"public\".\"CheckoutSession\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Connector.Connector_workspaceId_fkey",
+    "label": "Add foreign key \"Connector_workspaceId_fkey\" on \"Connector\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Connector_workspaceId_fkey",
+        "table": "Connector"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Connector_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Connector_workspaceId_fkey",
+          "public",
+          "\"public\".\"Connector\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Connector_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Connector\"\nADD CONSTRAINT \"Connector_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Connector_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Connector_workspaceId_fkey",
+          "public",
+          "\"public\".\"Connector\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Customer.Customer_workspaceId_fkey",
+    "label": "Add foreign key \"Customer_workspaceId_fkey\" on \"Customer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Customer_workspaceId_fkey",
+        "table": "Customer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Customer_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Customer_workspaceId_fkey",
+          "public",
+          "\"public\".\"Customer\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Customer_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Customer\"\nADD CONSTRAINT \"Customer_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Customer_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Customer_workspaceId_fkey",
+          "public",
+          "\"public\".\"Customer\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Customer.Customer_mergedIntoId_fkey",
+    "label": "Add foreign key \"Customer_mergedIntoId_fkey\" on \"Customer\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Customer_mergedIntoId_fkey",
+        "table": "Customer"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Customer_mergedIntoId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Customer_mergedIntoId_fkey",
+          "public",
+          "\"public\".\"Customer\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Customer_mergedIntoId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Customer\"\nADD CONSTRAINT \"Customer_mergedIntoId_fkey\"\nFOREIGN KEY (\"mergedIntoId\")\nREFERENCES \"public\".\"Customer\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Customer_mergedIntoId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Customer_mergedIntoId_fkey",
+          "public",
+          "\"public\".\"Customer\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Invite.Invite_workspaceId_fkey",
+    "label": "Add foreign key \"Invite_workspaceId_fkey\" on \"Invite\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Invite_workspaceId_fkey",
+        "table": "Invite"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Invite_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Invite_workspaceId_fkey",
+          "public",
+          "\"public\".\"Invite\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Invite_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Invite\"\nADD CONSTRAINT \"Invite_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Invite_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Invite_workspaceId_fkey",
+          "public",
+          "\"public\".\"Invite\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Invite.Invite_invitedBy_fkey",
+    "label": "Add foreign key \"Invite_invitedBy_fkey\" on \"Invite\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Invite_invitedBy_fkey",
+        "table": "Invite"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Invite_invitedBy_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Invite_invitedBy_fkey",
+          "public",
+          "\"public\".\"Invite\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Invite_invitedBy_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Invite\"\nADD CONSTRAINT \"Invite_invitedBy_fkey\"\nFOREIGN KEY (\"invitedBy\")\nREFERENCES \"public\".\"User\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Invite_invitedBy_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Invite_invitedBy_fkey",
+          "public",
+          "\"public\".\"Invite\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Location.Location_workspaceId_fkey",
+    "label": "Add foreign key \"Location_workspaceId_fkey\" on \"Location\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Location_workspaceId_fkey",
+        "table": "Location"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Location_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Location_workspaceId_fkey",
+          "public",
+          "\"public\".\"Location\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Location_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Location\"\nADD CONSTRAINT \"Location_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Location_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Location_workspaceId_fkey",
+          "public",
+          "\"public\".\"Location\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Order.Order_workspaceId_fkey",
+    "label": "Add foreign key \"Order_workspaceId_fkey\" on \"Order\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Order_workspaceId_fkey",
+        "table": "Order"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Order_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Order_workspaceId_fkey",
+          "public",
+          "\"public\".\"Order\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Order_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Order\"\nADD CONSTRAINT \"Order_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Order_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Order_workspaceId_fkey",
+          "public",
+          "\"public\".\"Order\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Order.Order_locationId_fkey",
+    "label": "Add foreign key \"Order_locationId_fkey\" on \"Order\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Order_locationId_fkey",
+        "table": "Order"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Order_locationId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Order_locationId_fkey",
+          "public",
+          "\"public\".\"Order\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Order_locationId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Order\"\nADD CONSTRAINT \"Order_locationId_fkey\"\nFOREIGN KEY (\"locationId\")\nREFERENCES \"public\".\"Location\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Order_locationId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Order_locationId_fkey",
+          "public",
+          "\"public\".\"Order\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Order.Order_customerId_fkey",
+    "label": "Add foreign key \"Order_customerId_fkey\" on \"Order\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Order_customerId_fkey",
+        "table": "Order"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Order_customerId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Order_customerId_fkey",
+          "public",
+          "\"public\".\"Order\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Order_customerId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Order\"\nADD CONSTRAINT \"Order_customerId_fkey\"\nFOREIGN KEY (\"customerId\")\nREFERENCES \"public\".\"Customer\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Order_customerId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Order_customerId_fkey",
+          "public",
+          "\"public\".\"Order\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Order.Order_connectorId_fkey",
+    "label": "Add foreign key \"Order_connectorId_fkey\" on \"Order\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Order_connectorId_fkey",
+        "table": "Order"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Order_connectorId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Order_connectorId_fkey",
+          "public",
+          "\"public\".\"Order\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Order_connectorId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Order\"\nADD CONSTRAINT \"Order_connectorId_fkey\"\nFOREIGN KEY (\"connectorId\")\nREFERENCES \"public\".\"Connector\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Order_connectorId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Order_connectorId_fkey",
+          "public",
+          "\"public\".\"Order\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.OrderItem.OrderItem_orderId_fkey",
+    "label": "Add foreign key \"OrderItem_orderId_fkey\" on \"OrderItem\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "OrderItem_orderId_fkey",
+        "table": "OrderItem"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"OrderItem_orderId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "OrderItem_orderId_fkey",
+          "public",
+          "\"public\".\"OrderItem\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"OrderItem_orderId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"OrderItem\"\nADD CONSTRAINT \"OrderItem_orderId_fkey\"\nFOREIGN KEY (\"orderId\")\nREFERENCES \"public\".\"Order\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"OrderItem_orderId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "OrderItem_orderId_fkey",
+          "public",
+          "\"public\".\"OrderItem\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.RawEvent.RawEvent_workspaceId_fkey",
+    "label": "Add foreign key \"RawEvent_workspaceId_fkey\" on \"RawEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "RawEvent_workspaceId_fkey",
+        "table": "RawEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"RawEvent_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "RawEvent_workspaceId_fkey",
+          "public",
+          "\"public\".\"RawEvent\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"RawEvent_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"RawEvent\"\nADD CONSTRAINT \"RawEvent_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"RawEvent_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "RawEvent_workspaceId_fkey",
+          "public",
+          "\"public\".\"RawEvent\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.RawEvent.RawEvent_connectorId_fkey",
+    "label": "Add foreign key \"RawEvent_connectorId_fkey\" on \"RawEvent\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "RawEvent_connectorId_fkey",
+        "table": "RawEvent"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"RawEvent_connectorId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "RawEvent_connectorId_fkey",
+          "public",
+          "\"public\".\"RawEvent\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"RawEvent_connectorId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"RawEvent\"\nADD CONSTRAINT \"RawEvent_connectorId_fkey\"\nFOREIGN KEY (\"connectorId\")\nREFERENCES \"public\".\"Connector\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"RawEvent_connectorId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "RawEvent_connectorId_fkey",
+          "public",
+          "\"public\".\"RawEvent\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Refund.Refund_workspaceId_fkey",
+    "label": "Add foreign key \"Refund_workspaceId_fkey\" on \"Refund\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Refund_workspaceId_fkey",
+        "table": "Refund"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Refund_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Refund_workspaceId_fkey",
+          "public",
+          "\"public\".\"Refund\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Refund_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Refund\"\nADD CONSTRAINT \"Refund_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Refund_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Refund_workspaceId_fkey",
+          "public",
+          "\"public\".\"Refund\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Refund.Refund_orderId_fkey",
+    "label": "Add foreign key \"Refund_orderId_fkey\" on \"Refund\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Refund_orderId_fkey",
+        "table": "Refund"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Refund_orderId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Refund_orderId_fkey",
+          "public",
+          "\"public\".\"Refund\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Refund_orderId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Refund\"\nADD CONSTRAINT \"Refund_orderId_fkey\"\nFOREIGN KEY (\"orderId\")\nREFERENCES \"public\".\"Order\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Refund_orderId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Refund_orderId_fkey",
+          "public",
+          "\"public\".\"Refund\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Session.Session_userId_fkey",
+    "label": "Add foreign key \"Session_userId_fkey\" on \"Session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Session_userId_fkey",
+        "table": "Session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Session_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Session_userId_fkey",
+          "public",
+          "\"public\".\"Session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Session_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Session\"\nADD CONSTRAINT \"Session_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"User\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Session_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Session_userId_fkey",
+          "public",
+          "\"public\".\"Session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Site.Site_workspaceId_fkey",
+    "label": "Add foreign key \"Site_workspaceId_fkey\" on \"Site\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Site_workspaceId_fkey",
+        "table": "Site"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Site_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Site_workspaceId_fkey",
+          "public",
+          "\"public\".\"Site\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Site_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Site\"\nADD CONSTRAINT \"Site_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Site_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Site_workspaceId_fkey",
+          "public",
+          "\"public\".\"Site\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.SupportAccessSession.SupportAccessSession_workspaceId_fkey",
+    "label": "Add foreign key \"SupportAccessSession_workspaceId_fkey\" on \"SupportAccessSession\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "SupportAccessSession_workspaceId_fkey",
+        "table": "SupportAccessSession"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"SupportAccessSession_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "SupportAccessSession_workspaceId_fkey",
+          "public",
+          "\"public\".\"SupportAccessSession\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"SupportAccessSession_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"SupportAccessSession\"\nADD CONSTRAINT \"SupportAccessSession_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"SupportAccessSession_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "SupportAccessSession_workspaceId_fkey",
+          "public",
+          "\"public\".\"SupportAccessSession\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Touch.Touch_workspaceId_fkey",
+    "label": "Add foreign key \"Touch_workspaceId_fkey\" on \"Touch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Touch_workspaceId_fkey",
+        "table": "Touch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Touch_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Touch_workspaceId_fkey",
+          "public",
+          "\"public\".\"Touch\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Touch_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Touch\"\nADD CONSTRAINT \"Touch_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Touch_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Touch_workspaceId_fkey",
+          "public",
+          "\"public\".\"Touch\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Touch.Touch_visitorId_fkey",
+    "label": "Add foreign key \"Touch_visitorId_fkey\" on \"Touch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Touch_visitorId_fkey",
+        "table": "Touch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Touch_visitorId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Touch_visitorId_fkey",
+          "public",
+          "\"public\".\"Touch\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Touch_visitorId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Touch\"\nADD CONSTRAINT \"Touch_visitorId_fkey\"\nFOREIGN KEY (\"visitorId\")\nREFERENCES \"public\".\"Visitor\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Touch_visitorId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Touch_visitorId_fkey",
+          "public",
+          "\"public\".\"Touch\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Touch.Touch_siteId_fkey",
+    "label": "Add foreign key \"Touch_siteId_fkey\" on \"Touch\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Touch_siteId_fkey",
+        "table": "Touch"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Touch_siteId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Touch_siteId_fkey",
+          "public",
+          "\"public\".\"Touch\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Touch_siteId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Touch\"\nADD CONSTRAINT \"Touch_siteId_fkey\"\nFOREIGN KEY (\"siteId\")\nREFERENCES \"public\".\"Site\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Touch_siteId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Touch_siteId_fkey",
+          "public",
+          "\"public\".\"Touch\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.User.User_workspaceId_fkey",
+    "label": "Add foreign key \"User_workspaceId_fkey\" on \"User\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "User_workspaceId_fkey",
+        "table": "User"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"User_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "User_workspaceId_fkey",
+          "public",
+          "\"public\".\"User\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"User_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"User\"\nADD CONSTRAINT \"User_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"User_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "User_workspaceId_fkey",
+          "public",
+          "\"public\".\"User\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.UserLocationAccess.UserLocationAccess_userId_fkey",
+    "label": "Add foreign key \"UserLocationAccess_userId_fkey\" on \"UserLocationAccess\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "UserLocationAccess_userId_fkey",
+        "table": "UserLocationAccess"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"UserLocationAccess_userId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "UserLocationAccess_userId_fkey",
+          "public",
+          "\"public\".\"UserLocationAccess\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"UserLocationAccess_userId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"UserLocationAccess\"\nADD CONSTRAINT \"UserLocationAccess_userId_fkey\"\nFOREIGN KEY (\"userId\")\nREFERENCES \"public\".\"User\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"UserLocationAccess_userId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "UserLocationAccess_userId_fkey",
+          "public",
+          "\"public\".\"UserLocationAccess\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.UserLocationAccess.UserLocationAccess_locationId_fkey",
+    "label": "Add foreign key \"UserLocationAccess_locationId_fkey\" on \"UserLocationAccess\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "UserLocationAccess_locationId_fkey",
+        "table": "UserLocationAccess"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"UserLocationAccess_locationId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "UserLocationAccess_locationId_fkey",
+          "public",
+          "\"public\".\"UserLocationAccess\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"UserLocationAccess_locationId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"UserLocationAccess\"\nADD CONSTRAINT \"UserLocationAccess_locationId_fkey\"\nFOREIGN KEY (\"locationId\")\nREFERENCES \"public\".\"Location\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"UserLocationAccess_locationId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "UserLocationAccess_locationId_fkey",
+          "public",
+          "\"public\".\"UserLocationAccess\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Visitor.Visitor_workspaceId_fkey",
+    "label": "Add foreign key \"Visitor_workspaceId_fkey\" on \"Visitor\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Visitor_workspaceId_fkey",
+        "table": "Visitor"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Visitor_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Visitor_workspaceId_fkey",
+          "public",
+          "\"public\".\"Visitor\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Visitor_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Visitor\"\nADD CONSTRAINT \"Visitor_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Visitor_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Visitor_workspaceId_fkey",
+          "public",
+          "\"public\".\"Visitor\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.Visitor.Visitor_customerId_fkey",
+    "label": "Add foreign key \"Visitor_customerId_fkey\" on \"Visitor\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "Visitor_customerId_fkey",
+        "table": "Visitor"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"Visitor_customerId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Visitor_customerId_fkey",
+          "public",
+          "\"public\".\"Visitor\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"Visitor_customerId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"Visitor\"\nADD CONSTRAINT \"Visitor_customerId_fkey\"\nFOREIGN KEY (\"customerId\")\nREFERENCES \"public\".\"Customer\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"Visitor_customerId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "Visitor_customerId_fkey",
+          "public",
+          "\"public\".\"Visitor\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.WebhookEndpoint.WebhookEndpoint_workspaceId_fkey",
+    "label": "Add foreign key \"WebhookEndpoint_workspaceId_fkey\" on \"WebhookEndpoint\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "WebhookEndpoint_workspaceId_fkey",
+        "table": "WebhookEndpoint"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"WebhookEndpoint_workspaceId_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "WebhookEndpoint_workspaceId_fkey",
+          "public",
+          "\"public\".\"WebhookEndpoint\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"WebhookEndpoint_workspaceId_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"WebhookEndpoint\"\nADD CONSTRAINT \"WebhookEndpoint_workspaceId_fkey\"\nFOREIGN KEY (\"workspaceId\")\nREFERENCES \"public\".\"Workspace\" (\"id\")\nON DELETE CASCADE"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"WebhookEndpoint_workspaceId_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "WebhookEndpoint_workspaceId_fkey",
+          "public",
+          "\"public\".\"WebhookEndpoint\""
+        ]
+      }
+    ]
+  }
+]

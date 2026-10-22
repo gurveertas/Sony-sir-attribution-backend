@@ -1,0 +1,1019 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attribution Platform — Integration Guide &amp; API Reference</title>
+<style>
+:root{--bg:#fff;--fg:#1a1d21;--muted:#5b6470;--line:#e3e7ec;--code:#f4f6f8;--accent:#2457d6}
+@media (prefers-color-scheme:dark){:root{--bg:#14171b;--fg:#e8ebef;--muted:#9aa4b0;--line:#2b3138;--code:#1d2228;--accent:#7aa2ff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:920px;margin:0 auto;padding:32px 20px 80px}
+h1{font-size:2rem;line-height:1.25}h2{margin-top:2.6rem;padding-top:1rem;border-top:1px solid var(--line)}h3{margin-top:2rem}
+a{color:var(--accent)}code{background:var(--code);padding:.12em .35em;border-radius:5px;font-size:.9em}
+pre{background:var(--code);padding:14px 16px;border-radius:8px;overflow-x:auto;border:1px solid var(--line)}pre code{background:none;padding:0}
+.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;margin:1rem 0;font-size:.95rem}
+th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}th{background:var(--code)}
+blockquote{margin:1rem 0;padding:.2rem 1rem;border-left:4px solid var(--accent);color:var(--muted)}
+hr{border:0;border-top:1px solid var(--line);margin:2rem 0}
+</style></head><body><main>
+<h1 id="attribution-platform-company-integration-guide-api-reference">Attribution Platform — Company Integration Guide &amp; API Reference</h1>
+<p>This guide is for <strong>companies using the platform</strong> and the <strong>developers who integrate it</strong>. It explains what the platform does, how to go live, every public API call, how payment gateways connect, how to receive webhooks, and exactly how each number is calculated.</p>
+<blockquote>
+<p>The internal dashboard/admin endpoints are documented in <code>API_DOCUMENTATION.md</code>. This guide covers what a company and its developers need.</p>
+</blockquote>
+<p><strong>Contents</strong>
+1. <a href="#1-what-the-platform-does">What the platform does</a>
+2. <a href="#2-go-live-in-about-30-minutes">Go live in about 30 minutes</a>
+3. <a href="#3-core-concepts">Core concepts</a>
+4. <a href="#4-authentication-keys-and-limits">Authentication, keys and limits</a>
+5. <a href="#5-tracking-api-browser">Tracking API (browser)</a>
+6. <a href="#6-conversion-api-orders-bookings-refunds">Conversion API (orders, bookings, refunds)</a>
+7. <a href="#7-read-api-data-and-reports">Read API (data and reports)</a>
+8. <a href="#8-payment-gateways-and-other-connectors">Payment gateways and other connectors</a>
+9. <a href="#9-outbound-webhooks">Outbound webhooks</a>
+10. <a href="#10-how-attribution-works">How attribution works</a>
+11. <a href="#11-metric-definitions">Metric definitions</a>
+12. <a href="#12-time-currency-and-money-rules">Time, currency and money rules</a>
+13. <a href="#13-team-roles-privacy-and-support-access">Team, roles, privacy and support access</a>
+14. <a href="#14-errors-troubleshooting-and-checklist">Errors, troubleshooting and checklist</a></p>
+<p>Throughout, <code>https://api.example.com</code> stands for your platform's API address. Replace it with the base URL you were given.</p>
+<hr />
+<h2 id="1-what-the-platform-does">1. What the platform does</h2>
+<p>The platform tells you <strong>which marketing source brought each paying customer or booking</strong>, and shows the result as revenue, customer and booking reports you can trace back to individual orders.</p>
+<pre><code>Visitor on your website ──► records each visit as a &quot;touch&quot; (source, campaign, click IDs)
+        │
+        ▼
+Checkout starts ──► you ask for a checkout token (freezes that visitor's touches)
+        │
+        ▼
+Token is placed in the payment/booking system (Stripe metadata, Razorpay notes, ...)
+        │
+        ▼
+Payment completes ──► the gateway webhook (or your server) sends the order to the platform
+        │
+        ▼
+Platform matches the order to the touches, resolves the customer, and credits channels
+under six attribution models ──► dashboards, reports and API
+</code></pre>
+<p>If no token is available, the platform falls back to matching by hashed email or phone, then by click ID, and records <strong>how</strong> each order was matched (see <a href="#match-methods">match methods</a>).</p>
+<hr />
+<h2 id="2-go-live-in-about-30-minutes">2. Go live in about 30 minutes</h2>
+<h3 id="step-1-create-the-company-account-3-min">Step 1 — Create the company account (≈3 min)</h3>
+<p><code>POST /api/auth/company/register</code> with company name, admin email, password and a 2-letter country code. A verification email is sent (the link is valid for <strong>15 minutes</strong>). Verify it, then sign in with <code>POST /api/auth/user/login</code>.</p>
+<h3 id="step-2-add-and-verify-your-website-5-min">Step 2 — Add and verify your website (≈5 min)</h3>
+<ol>
+<li><code>POST /api/sites</code> with <code>{ "domain": "shop.example.com", "verificationMethod": "dns_txt" }</code> (or <code>"meta_tag"</code>).</li>
+<li>Prove you own the domain using the returned instructions:
+   - <strong>DNS TXT:</strong> create a TXT record at <code>_attribution-verify.shop.example.com</code> whose value is the returned token.
+   - <strong>Meta tag:</strong> add <code>&lt;meta name="attribution-verify" content="TOKEN"&gt;</code> to your home page <code>&lt;head&gt;</code>.</li>
+<li><code>POST /api/sites/:id/verify</code>. Live keys stay inactive until the site is verified.</li>
+</ol>
+<h3 id="step-3-create-api-keys-2-min">Step 3 — Create API keys (≈2 min)</h3>
+<p><code>POST /api/api-keys</code> once per key type:
+- a <strong>publishable</strong> key (<code>pk_live_…</code>) with <code>allowedOrigins: ["https://shop.example.com"]</code> for the browser;
+- a <strong>secret</strong> key (<code>sk_live_…</code>) for your server.</p>
+<p>The full key is <strong>shown only once</strong> — store it immediately. A workspace has one active key per type; use <code>POST /api/api-keys/rotate</code> to replace it. Use <code>mode: "test"</code> keys while building.</p>
+<h3 id="step-4-install-tracking-on-your-website-10-min">Step 4 — Install tracking on your website (≈10 min)</h3>
+<p>Add the snippet from <a href="#54-reference-browser-snippet">section 5.4</a> to every page. It records visits and gives you a checkout token.</p>
+<h3 id="step-5-connect-payments-5-min">Step 5 — Connect payments (≈5 min)</h3>
+<p>Choose one:
+- <strong>Stripe / PayPal:</strong> one-click connect (the platform creates the webhook for you) — see <a href="#81-one-click-connect-stripe-paypal-razorpay">section 8.1</a>.
+- <strong>Razorpay:</strong> the platform gives you a webhook URL and secret to paste into the Razorpay dashboard.
+- <strong>Shopify, Zenoti, or your own system:</strong> see <a href="#84-shopify-zenoti-and-generic-connectors">8.4</a> or send orders yourself with the <a href="#6-conversion-api-orders-bookings-refunds">Conversion API</a>.</p>
+<h3 id="step-6-pass-the-checkout-token-to-your-payment-system-5-min">Step 6 — Pass the checkout token to your payment system (≈5 min)</h3>
+<p>Call <code>getCheckoutToken()</code> when checkout starts and store the token in the payment system's extra data. The exact field per gateway is in the <a href="#82-where-to-put-the-checkout-token">table in 8.2</a>.</p>
+<h3 id="step-7-test-and-go-live">Step 7 — Test and go live</h3>
+<p>Make a test purchase. In the dashboard, <strong>Connectors</strong> shows the connector turn <em>healthy</em> when the first event arrives, and the order appears with its <strong>match method</strong> (<code>token</code> is what you want). You are live.</p>
+<hr />
+<h2 id="3-core-concepts">3. Core concepts</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Workspace</strong> (company)</td>
+<td>Your isolated account. Every request is scoped to it by your key or login — never by anything in the request.</td>
+</tr>
+<tr>
+<td><strong>Site</strong></td>
+<td>A website you own, verified by DNS or meta tag.</td>
+</tr>
+<tr>
+<td><strong>Location</strong></td>
+<td>A branch/outlet with its own timezone and currency (optional).</td>
+</tr>
+<tr>
+<td><strong>Visitor</strong></td>
+<td>An anonymous browser, identified by a first-party <code>visitorId</code> you generate.</td>
+</tr>
+<tr>
+<td><strong>Touch</strong></td>
+<td>One recorded visit with its source, medium, campaign, referrer, landing page and click IDs. Touches are never overwritten.</td>
+</tr>
+<tr>
+<td><strong>Checkout token</strong></td>
+<td>A short-lived code (default <strong>2 hours</strong>) that freezes a visitor's touches at the moment checkout starts.</td>
+</tr>
+<tr>
+<td><strong>Customer</strong></td>
+<td>A real person, resolved from hashed email/phone/external ID. Several visitors (phone, laptop) can belong to one customer.</td>
+</tr>
+<tr>
+<td><strong>Order</strong></td>
+<td>A paid order. <strong>Booking</strong>: an appointment, attributed when it is <em>created</em>, not when paid.</td>
+</tr>
+<tr>
+<td><strong>Credit</strong></td>
+<td>The share of an order given to a touch under an attribution model.</td>
+</tr>
+<tr>
+<td><strong>Connector</strong></td>
+<td>An inbound integration (Stripe, PayPal, Razorpay, Shopify, Zenoti, generic).</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="match-methods">Match methods</h3>
+<p>Every order records how it was matched to its marketing source:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th><code>matchMethod</code></th>
+<th>Meaning</th>
+<th>Confidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>token</code></td>
+<td>The checkout token was present and valid</td>
+<td>Highest</td>
+</tr>
+<tr>
+<td><code>click_id</code></td>
+<td>A click ID (gclid/fbclid/…) was in the payload</td>
+<td>High</td>
+</tr>
+<tr>
+<td><code>email</code> / <code>phone</code></td>
+<td>The customer was linked to a known visitor by hashed email/phone</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td><code>none</code></td>
+<td>No match; shown as <strong>Direct / unknown</strong></td>
+<td>—</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="4-authentication-keys-and-limits">4. Authentication, keys and limits</h2>
+<h3 id="sending-a-key">Sending a key</h3>
+<p>Either header works:</p>
+<pre><code>Authorization: Bearer sk_live_xxxxxxxx
+X-Api-Key: sk_live_xxxxxxxx
+</code></pre>
+<h3 id="which-key-for-what">Which key for what</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Where it lives</th>
+<th>Allowed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Publishable</strong> <code>pk_…</code></td>
+<td>In your website (public)</td>
+<td><code>POST /v1/touches</code>, <code>/v1/identify</code>, <code>/v1/checkout-sessions</code>, <code>/v1/orders</code>, <code>/v1/conversions</code>, <code>/v1/bookings</code></td>
+</tr>
+<tr>
+<td><strong>Secret</strong> <code>sk_…</code></td>
+<td>Your server only — never in a web page or app</td>
+<td>Everything above <strong>plus</strong> refunds, order/booking edits, and <strong>all read endpoints</strong></td>
+</tr>
+</tbody>
+</table></div>
+<p>Rules enforced by the platform:
+- <strong>Publishable keys work only from their allowed origins.</strong> A request from another website gets <code>403 Origin not allowed for this key</code>. Test-mode keys may be called without an <code>Origin</code> header (curl, Postman); live keys may not.
+- <strong>Refunds and edits (<code>POST /v1/refunds</code>, <code>PATCH /v1/orders/:id</code>, <code>PATCH /v1/bookings/:id</code>) need a secret key.</strong> A publishable key is visible to anyone who views your page source, so it must never be able to change existing records.
+- <strong>Reading data needs a secret key.</strong> Publishable keys are rejected on every <code>GET</code>.
+- Because a publishable key is public, an order posted from the browser can be forged by a visitor. <strong>For trustworthy revenue, send orders from your server with the secret key</strong> (or through a gateway connector).
+- A live key is inactive until its site is verified. A <strong>suspended or closed company's keys stop working immediately</strong> (<code>403 Workspace is not active</code>).
+- Keys are stored hashed. Lost keys cannot be recovered — rotate instead.</p>
+<h3 id="rate-limits">Rate limits</h3>
+<p>Each key has a per-minute limit (new keys default to <strong>600/min</strong>; configurable per key). Every response carries:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Header</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>X-RateLimit-Limit</code></td>
+<td>Requests allowed per minute</td>
+</tr>
+<tr>
+<td><code>X-RateLimit-Remaining</code></td>
+<td>Requests left in the window</td>
+</tr>
+<tr>
+<td><code>X-RateLimit-Reset</code></td>
+<td>Unix time when the window resets</td>
+</tr>
+<tr>
+<td><code>Retry-After</code></td>
+<td>Seconds to wait (only on <code>429</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="errors">Errors</h3>
+<p>All errors are JSON with a human-readable <code>message</code>:</p>
+<pre><code class="language-json">{ &quot;message&quot;: &quot;externalId is required&quot; }
+</code></pre>
+<p>Some also include a machine-readable <code>code</code>. See <a href="#14-errors-troubleshooting-and-checklist">section 14</a>.</p>
+<h3 id="idempotency">Idempotency</h3>
+<p>Sending the same order, booking or refund twice <strong>never double-counts</strong>. Orders and bookings are deduplicated on <code>externalId</code> (or your <code>idempotencyKey</code> if you send one); refunds on <code>externalId</code> / <code>idempotencyKey</code>. It is always safe to retry after a timeout.</p>
+<hr />
+<h2 id="5-tracking-api-browser">5. Tracking API (browser)</h2>
+<p>Auth: <strong>publishable key</strong>, sent from an allowed origin.</p>
+<h3 id="51-record-a-touch-post-v1touches">5.1 Record a touch — <code>POST /v1/touches</code></h3>
+<p>Call on every page view (after consent, where required).</p>
+<pre><code class="language-json">{
+  &quot;visitorId&quot;: &quot;7b0e1c2e-…&quot;,
+  &quot;touchedAt&quot;: &quot;2026-03-01T15:30:00.000Z&quot;,
+  &quot;source&quot;: &quot;google&quot;, &quot;medium&quot;: &quot;cpc&quot;, &quot;campaign&quot;: &quot;summer_sale&quot;,
+  &quot;term&quot;: &quot;running shoes&quot;, &quot;content&quot;: &quot;ad_variant_1&quot;,
+  &quot;referrer&quot;: &quot;https://google.com&quot;,
+  &quot;landingPage&quot;: &quot;https://shop.example.com/shoes?utm_source=google&quot;,
+  &quot;pageTitle&quot;: &quot;Shoes | Acme&quot;,
+  &quot;gclid&quot;: &quot;Cj0K…&quot;, &quot;fbclid&quot;: null, &quot;ttclid&quot;: null, &quot;msclkid&quot;: null,
+  &quot;fbc&quot;: null, &quot;fbp&quot;: &quot;fb.1.1700000000.123&quot;, &quot;ga&quot;: &quot;GA1.2.123.456&quot;
+}
+</code></pre>
+<p>Only <code>visitorId</code> is required. <strong>Response <code>201</code></strong></p>
+<pre><code class="language-json">{ &quot;id&quot;: &quot;…&quot;, &quot;touchId&quot;: &quot;…&quot;, &quot;visitorId&quot;: &quot;…&quot;, &quot;visitorRecordId&quot;: &quot;…&quot;,
+  &quot;siteId&quot;: &quot;…&quot;, &quot;channel&quot;: &quot;paid_search&quot;, &quot;touchedAt&quot;: &quot;2026-03-01T15:30:00.000Z&quot; }
+</code></pre>
+<p>A repeat visit from the same campaign within <strong>30 minutes</strong> is de-duplicated and returns the existing touch with <code>200</code>. The platform classifies each touch into a <code>channel</code> (for example <code>paid_search</code>, <code>google</code>, <code>meta</code>, <code>tiktok</code>, <code>bing</code>, <code>social</code>, <code>email</code>, <code>organic</code>, <code>direct</code>); a click ID outranks UTM tags, which outrank a bare referrer, which outranks direct. A later direct visit never replaces a paid click.</p>
+<h3 id="52-identify-a-visitor-post-v1identify">5.2 Identify a visitor — <code>POST /v1/identify</code></h3>
+<p>Call when the visitor gives their email or phone (sign-in, enquiry form). Links the anonymous visitor to a customer, so touches from every device combine.</p>
+<pre><code class="language-json">{ &quot;visitorId&quot;: &quot;7b0e1c2e-…&quot;, &quot;email&quot;: &quot;customer@example.com&quot;, &quot;phone&quot;: &quot;+14155552671&quot; }
+</code></pre>
+<p><strong>Response <code>200</code>:</strong> <code>{ "customerId", "visitorId", "visitorRecordId", "touchIds": [...], "touchCount", "isNew" }</code>.
+Email and phone are stored hashed for matching (the email is also kept encrypted).</p>
+<h3 id="53-create-a-checkout-token-post-v1checkout-sessions">5.3 Create a checkout token — <code>POST /v1/checkout-sessions</code></h3>
+<p>Call when the visitor starts checkout or booking.</p>
+<pre><code class="language-json">{ &quot;visitorId&quot;: &quot;7b0e1c2e-…&quot;, &quot;expiresInMs&quot;: 7200000 }
+</code></pre>
+<p><strong>Response <code>201</code>:</strong> <code>{ "checkoutSessionId", "token": "cs_…", "visitorId", "touchIds": [...], "touchCount", "expiresAt" }</code>.
+Put <code>token</code> into your payment/booking system — see <a href="#82-where-to-put-the-checkout-token">8.2</a>.</p>
+<h3 id="54-reference-browser-snippet">5.4 Reference browser snippet</h3>
+<p>A minimal, dependency-free example you can paste into your pages. Adjust <code>API</code> and <code>KEY</code>, and call it only after the visitor has consented where the law requires.</p>
+<pre><code class="language-html">&lt;script&gt;
+(function () {
+  var API = &quot;https://api.example.com&quot;;
+  var KEY = &quot;pk_live_xxxxxxxx&quot;;               // publishable key (safe to expose)
+
+  function cookie(name) {
+    var m = document.cookie.match(&quot;(?:^|; )&quot; + name + &quot;=([^;]*)&quot;);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  function uuid() {
+    return (crypto.randomUUID &amp;&amp; crypto.randomUUID()) ||
+      &quot;xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx&quot;.replace(/[xy]/g, function (c) {
+        var r = (Math.random() * 16) | 0; return (c === &quot;x&quot; ? r : (r &amp; 3) | 8).toString(16);
+      });
+  }
+  var visitorId = localStorage.getItem(&quot;attr_vid&quot;);
+  if (!visitorId) { visitorId = uuid(); localStorage.setItem(&quot;attr_vid&quot;, visitorId); }
+
+  function post(path, body) {
+    return fetch(API + path, {
+      method: &quot;POST&quot;, keepalive: true,
+      headers: { &quot;Content-Type&quot;: &quot;application/json&quot;, Authorization: &quot;Bearer &quot; + KEY },
+      body: JSON.stringify(body)
+    }).then(function (r) { return r.json(); });
+  }
+
+  var q = new URLSearchParams(location.search);
+  post(&quot;/v1/touches&quot;, {
+    visitorId: visitorId,
+    source: q.get(&quot;utm_source&quot;), medium: q.get(&quot;utm_medium&quot;), campaign: q.get(&quot;utm_campaign&quot;),
+    term: q.get(&quot;utm_term&quot;), content: q.get(&quot;utm_content&quot;),
+    referrer: document.referrer || null, landingPage: location.href, pageTitle: document.title,
+    gclid: q.get(&quot;gclid&quot;), fbclid: q.get(&quot;fbclid&quot;), ttclid: q.get(&quot;ttclid&quot;), msclkid: q.get(&quot;msclkid&quot;),
+    fbc: cookie(&quot;_fbc&quot;), fbp: cookie(&quot;_fbp&quot;), ga: cookie(&quot;_ga&quot;)
+  });
+
+  window.Attribution = {
+    identify: function (email, phone) { return post(&quot;/v1/identify&quot;, { visitorId: visitorId, email: email, phone: phone }); },
+    getCheckoutToken: function () { return post(&quot;/v1/checkout-sessions&quot;, { visitorId: visitorId }).then(function (r) { return r.token; }); }
+  };
+})();
+&lt;/script&gt;
+</code></pre>
+<p>Usage when checkout starts:</p>
+<pre><code class="language-js">const token = await Attribution.getCheckoutToken();
+// e.g. add it to your Stripe PaymentIntent metadata as attribution_token
+</code></pre>
+<hr />
+<h2 id="6-conversion-api-orders-bookings-refunds">6. Conversion API (orders, bookings, refunds)</h2>
+<p>Use these when you are <strong>not</strong> using a gateway connector, or to add data a connector cannot see. Amounts are in <strong>major units</strong> (e.g. <code>99.99</code>); the platform stores them as integer minor units.</p>
+<h3 id="61-create-an-order-post-v1orders-alias-v1conversions">6.1 Create an order — <code>POST /v1/orders</code> (alias <code>/v1/conversions</code>)</h3>
+<p>Auth: publishable or <strong>secret</strong> key (use the secret key from your server for trusted revenue).</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>externalId</code></td>
+<td>yes</td>
+<td>Your order ID — also the de-duplication key</td>
+</tr>
+<tr>
+<td><code>orderedAt</code></td>
+<td>yes</td>
+<td>ISO-8601 time the order was <strong>paid</strong></td>
+</tr>
+<tr>
+<td><code>currency</code></td>
+<td>yes</td>
+<td>3-letter ISO code (<code>USD</code>, <code>INR</code>)</td>
+</tr>
+<tr>
+<td><code>grossAmount</code>, <code>netAmount</code></td>
+<td>yes</td>
+<td>Major units</td>
+</tr>
+<tr>
+<td><code>discountAmount</code>, <code>taxAmount</code></td>
+<td>no</td>
+<td>Major units</td>
+</tr>
+<tr>
+<td><code>checkoutToken</code></td>
+<td>no</td>
+<td>From <code>/v1/checkout-sessions</code></td>
+</tr>
+<tr>
+<td><code>visitorId</code></td>
+<td>no</td>
+<td>Fallback when there is no token</td>
+</tr>
+<tr>
+<td><code>email</code>, <code>phone</code></td>
+<td>no</td>
+<td>For customer resolution / fallback matching</td>
+</tr>
+<tr>
+<td><code>locationId</code></td>
+<td>no</td>
+<td>One of your locations</td>
+</tr>
+<tr>
+<td><code>items</code></td>
+<td>no</td>
+<td><code>[{ name, quantity, unitAmount, currency, externalId? }]</code></td>
+</tr>
+<tr>
+<td><code>idempotencyKey</code></td>
+<td>no</td>
+<td>Defaults to <code>externalId</code></td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-bash">curl -X POST https://api.example.com/v1/orders \
+  -H &quot;Authorization: Bearer sk_live_xxxxxxxx&quot; -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;externalId&quot;:&quot;order_12345&quot;,&quot;orderedAt&quot;:&quot;2026-03-01T15:45:00Z&quot;,&quot;currency&quot;:&quot;USD&quot;,
+       &quot;grossAmount&quot;:150.00,&quot;netAmount&quot;:140.00,&quot;discountAmount&quot;:10.00,
+       &quot;checkoutToken&quot;:&quot;cs_xxxxxxxx&quot;,&quot;email&quot;:&quot;customer@example.com&quot;}'
+</code></pre>
+<p><strong>Response <code>201</code>:</strong></p>
+<pre><code class="language-json">{ &quot;id&quot;: &quot;…&quot;, &quot;orderId&quot;: &quot;…&quot;, &quot;externalId&quot;: &quot;order_12345&quot;, &quot;customerId&quot;: &quot;…&quot;,
+  &quot;touchIds&quot;: [&quot;…&quot;], &quot;attributionCreditIds&quot;: [&quot;…&quot;], &quot;status&quot;: &quot;paid&quot;,
+  &quot;matchMethod&quot;: &quot;token&quot;, &quot;isNewCustomer&quot;: true, &quot;touchCount&quot;: 2, &quot;currency&quot;: &quot;USD&quot; }
+</code></pre>
+<p>Credit rows are written for all six attribution models in one transaction, so any model can be shown instantly.</p>
+<h3 id="62-update-an-order-patch-v1ordersid-secret-key">6.2 Update an order — <code>PATCH /v1/orders/:id</code> (secret key)</h3>
+<p>Edits an existing order. <code>404 Order not found</code> if it does not exist in your workspace.</p>
+<h3 id="63-create-a-booking-post-v1bookings">6.3 Create a booking — <code>POST /v1/bookings</code></h3>
+<p>Same attribution pipeline as orders, but attributed <strong>when the booking is created</strong>.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Required</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>externalId</code>, <code>appointmentStartAt</code>, <code>currency</code>, <code>bookedValue</code></td>
+<td>yes</td>
+</tr>
+<tr>
+<td><code>checkoutToken</code>, <code>visitorId</code>, <code>email</code>, <code>phone</code>, <code>locationId</code>, <code>serviceName</code>, <code>appointmentEndAt</code>, <code>idempotencyKey</code></td>
+<td>no</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="64-update-a-booking-patch-v1bookingsid-secret-key">6.4 Update a booking — <code>PATCH /v1/bookings/:id</code> (secret key)</h3>
+<pre><code class="language-json">{ &quot;status&quot;: &quot;completed&quot;, &quot;reason&quot;: &quot;Guest attended&quot; }
+</code></pre>
+<p><code>status</code> is one of <code>scheduled</code>, <code>confirmed</code>, <code>completed</code>, <code>cancelled</code>, <code>rescheduled</code>, <code>no_show</code>. Every change is kept in the booking's status history.</p>
+<h3 id="65-record-a-refund-post-v1refunds-secret-key">6.5 Record a refund — <code>POST /v1/refunds</code> (secret key)</h3>
+<pre><code class="language-json">{ &quot;externalOrderId&quot;: &quot;order_12345&quot;, &quot;amount&quot;: 25.00, &quot;currency&quot;: &quot;USD&quot;,
+  &quot;reason&quot;: &quot;Customer request&quot;, &quot;externalId&quot;: &quot;re_789&quot;, &quot;refundedAt&quot;: &quot;2026-03-03T10:00:00Z&quot; }
+</code></pre>
+<p>Use <code>orderId</code> (platform ID) <strong>or</strong> <code>externalOrderId</code> (your ID). The refund is linked to the order, the order becomes <code>partially_refunded</code> or <code>refunded</code>, and revenue is reduced <strong>on the refund date</strong>. <code>currency</code> must match the order.</p>
+<hr />
+<h2 id="7-read-api-data-and-reports">7. Read API (data and reports)</h2>
+<p>Auth: <strong>secret key</strong> (server-side) — or a signed-in dashboard session. Responses are scoped to your workspace automatically.</p>
+<h3 id="71-lists">7.1 Lists</h3>
+<p>All lists are paginated: <code>?page=1&amp;limit=25</code> (max <code>limit</code> 100) and return</p>
+<pre><code class="language-json">{ &quot;data&quot;: [ … ], &quot;pagination&quot;: { &quot;page&quot;: 1, &quot;limit&quot;: 25, &quot;total&quot;: 120, &quot;pages&quot;: 5 } }
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Filters</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /v1/orders</code></td>
+<td><code>status</code>, <code>locationId</code>, <code>from</code>, <code>to</code></td>
+</tr>
+<tr>
+<td><code>GET /v1/orders/:id/attribution</code></td>
+<td><code>model</code> — the order's journey and credit</td>
+</tr>
+<tr>
+<td><code>GET /v1/customers</code></td>
+<td><code>externalIdKey</code> + <code>externalId</code></td>
+</tr>
+<tr>
+<td><code>GET /v1/customers/:id/journey</code></td>
+<td><code>model</code> — touches, bookings, orders, credit</td>
+</tr>
+<tr>
+<td><code>GET /v1/bookings</code></td>
+<td><code>status</code>, <code>locationId</code>, <code>from</code>, <code>to</code> (by appointment time)</td>
+</tr>
+<tr>
+<td><code>GET /v1/bookings/upcoming</code></td>
+<td><code>days</code> (1–90, default 7), <code>locationId</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>Customer email addresses are returned only to signed-in dashboard users, never through API keys.</p>
+<h3 id="72-reports">7.2 Reports</h3>
+<p><code>GET /v1/reports/{summary|channels|campaigns|locations|trend|customers|dashboard}</code></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>from</code>, <code>to</code></td>
+<td><code>YYYY-MM-DD</code> = <strong>whole local days</strong> in your timezone (<code>to</code> includes the entire last day); or a full ISO timestamp for an exact instant. Default: the last 30 local days ending today</td>
+</tr>
+<tr>
+<td><code>tz</code></td>
+<td>IANA timezone (e.g. <code>Asia/Kolkata</code>). Default: your workspace timezone</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td><code>first_touch</code>, <code>last_touch</code>, <code>last_non_direct</code> <em>(default)</em>, <code>linear</code>, <code>time_decay</code>, <code>position_based</code></td>
+</tr>
+<tr>
+<td><code>locationId</code></td>
+<td>Restrict to one location</td>
+</tr>
+</tbody>
+</table></div>
+<p>Every report returns <code>period: { from, to, tz }</code> so you can see exactly which window was used. Invalid dates or timezones return <code>400</code>.</p>
+<p><strong>Summary</strong> (<code>/v1/reports/summary</code>) — example:</p>
+<pre><code class="language-json">{
+  &quot;period&quot;: { &quot;from&quot;: &quot;2026-02-01T18:30:00.000Z&quot;, &quot;to&quot;: &quot;2026-03-02T18:29:59.999Z&quot;, &quot;tz&quot;: &quot;Asia/Kolkata&quot; },
+  &quot;currency&quot;: &quot;USD&quot;, &quot;model&quot;: &quot;last_non_direct&quot;,
+  &quot;revenue&quot;:  { &quot;grossMinorUnits&quot;: &quot;1500000&quot;, &quot;discountsMinorUnits&quot;: &quot;50000&quot;, &quot;refundsMinorUnits&quot;: &quot;20000&quot;,
+                &quot;netMinorUnits&quot;: &quot;1430000&quot;, &quot;averageOrderValueMinorUnits&quot;: 14300 },
+  &quot;orders&quot;:   { &quot;total&quot;: 100, &quot;newCustomers&quot;: 61, &quot;returningCustomers&quot;: 39 },
+  &quot;attribution&quot;: { &quot;attributedRevenueMinorUnits&quot;: &quot;1200000&quot;, &quot;coverageRate&quot;: 83.9 },
+  &quot;bookings&quot;: { &quot;total&quot;: 40, &quot;scheduled&quot;: 22, &quot;cancelled&quot;: 5, &quot;bookedValueMinorUnits&quot;: &quot;300000&quot;, &quot;cancellationRate&quot;: 12.5 }
+}
+</code></pre>
+<ul>
+<li><strong>Channels / campaigns:</strong> revenue by source. An order whose credit is split across channels (linear, time decay, position based) appears in each channel it touched, with that channel's share of the revenue.</li>
+<li><strong>Locations:</strong> per location, plus a "(No location)" row for unassigned orders.</li>
+<li><strong>Trend:</strong> one row per <strong>local day</strong> (<code>date</code>, <code>orders</code>, <code>netMinorUnits</code>, <code>newCustomers</code>).</li>
+<li><strong>Customers:</strong> <code>newCustomers</code>, <code>returningCustomers</code>, <code>totalCustomers</code>, <code>repeatRate</code>.</li>
+<li><strong>Dashboard:</strong> an all-in-one overview used by the dashboard.</li>
+</ul>
+<blockquote>
+<p><strong>Drill-down always adds up.</strong> Lists use the same local-day rule as reports, so the orders listed for a date range sum to that range's report total.</p>
+</blockquote>
+<p>Money is always returned as <strong>strings in minor units</strong> (cents/paise) so large values never lose precision.</p>
+<hr />
+<h2 id="8-payment-gateways-and-other-connectors">8. Payment gateways and other connectors</h2>
+<p>Every connector converts the source's event into the same internal event, stores the <strong>raw payload first</strong> (so failures can be replayed), verifies the sender's signature, and de-duplicates by the source's own IDs.</p>
+<h3 id="81-one-click-connect-stripe-paypal-razorpay">8.1 One-click connect (Stripe, PayPal, Razorpay)</h3>
+<p>All calls need a signed-in <strong>company admin</strong>. Replace the host with your API address.</p>
+<p><strong>See what is supported and whether the server is ready</strong></p>
+<pre><code>GET /api/workspace/connectors/gateways
+</code></pre>
+<p>If <code>ready</code> is <code>false</code>, the response's <code>problem</code> explains why (the server's public address must be a public HTTPS URL, because gateways only send webhooks to HTTPS).</p>
+<p><strong>Connect</strong></p>
+<pre><code>POST /api/workspace/connectors/connect
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Gateway</th>
+<th>Body</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Stripe</strong></td>
+<td><code>{ "type": "stripe", "credentials": { "secretKey": "sk_live_… or rk_live_…" } }</code></td>
+<td>The platform creates the webhook endpoint at Stripe and stores its signing secret (encrypted). <strong>Your API key is used once and is not stored.</strong> A restricted key needs <em>Write</em> access to <em>Webhook Endpoints</em>.</td>
+</tr>
+<tr>
+<td><strong>PayPal</strong></td>
+<td><code>{ "type": "paypal", "credentials": { "environment": "live", "clientId": "…", "clientSecret": "…" } }</code></td>
+<td>The platform creates the webhook through PayPal. Client ID/secret are stored encrypted (needed to verify each event).</td>
+</tr>
+<tr>
+<td><strong>Razorpay</strong></td>
+<td><code>{ "type": "razorpay" }</code></td>
+<td>Razorpay only allows API-created webhooks for partner accounts. The response contains a <strong>webhook URL and secret — shown once</strong> — that you paste into <strong>Razorpay Dashboard → Account &amp; Settings → Webhooks</strong>, ticking <code>payment.captured</code> and <code>refund.processed</code>.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Optional <code>name</code> labels the connector. A successful connect returns <code>201</code> with the connector, its <code>webhookUrl</code>, and <code>setup</code> (Razorpay only). The connector is <strong>pending</strong> until the first verified event arrives, then <strong>healthy</strong>.</p>
+<p>Possible errors: <code>400 invalid_credentials</code> (gateway rejected the credentials), <code>409 already_connected</code> (this gateway account is already connected), <code>422</code> (gateway refused the request), <code>502 unavailable</code> (gateway unreachable — retry).</p>
+<p><strong>Manage</strong>
+| Call | Purpose |
+|---|---|
+| <code>GET /api/workspace/connectors</code> | List connectors with status, last event and webhook URL |
+| <code>GET /api/workspace/connectors/:id</code> | One connector (never returns secrets) |
+| <code>POST /api/workspace/connectors/:id/verify</code> | Health checks: secret stored, remote webhook still exists, correct URL, events subscribed, first event received |
+| <code>POST /api/workspace/connectors/:id/reconnect</code> | New credentials, or rotate the Razorpay secret. Also re-enables a disconnected connector |
+| <code>POST /api/workspace/connectors/:id/disconnect</code> | Stops the connector. Body <code>{ "credentials": { "secretKey": "…" } }</code> (Stripe) lets the platform delete the webhook at Stripe; otherwise it tells you to delete it by hand. History is kept |
+| <code>GET /api/workspace/connectors/:id/events</code> | Event log (<code>?status=failed</code>) |
+| <code>GET /api/workspace/connectors/:id/events/:eventId</code> | One event <strong>with its raw payload</strong> (admins only; may contain customer data) |
+| <code>POST /api/workspace/connectors/:id/events/:eventId/replay</code> | Re-run a failed event |
+| <code>POST /api/workspace/connectors/:id/events/replay-failed</code> | Re-run recent failed events, oldest first (<code>limit</code> ≤ 50) |</p>
+<p><strong>Statuses:</strong> <code>pending</code> (waiting for first event) → <code>healthy</code>; <code>failing</code> after a processing error (returns to <code>healthy</code> on the next good event); <code>disabled</code> after disconnect — events for a disabled connector are acknowledged and ignored.</p>
+<h3 id="82-where-to-put-the-checkout-token">8.2 Where to put the checkout token</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>System</th>
+<th>Put the token here</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stripe PaymentIntent</td>
+<td><code>metadata.attribution_token</code></td>
+</tr>
+<tr>
+<td>Stripe Checkout Session</td>
+<td><code>metadata.attribution_token</code> <strong>and</strong> <code>payment_intent_data.metadata.attribution_token</code> (or <code>client_reference_id</code>)</td>
+</tr>
+<tr>
+<td>Razorpay</td>
+<td><code>notes.attribution_token</code></td>
+</tr>
+<tr>
+<td>PayPal</td>
+<td><code>custom_id</code> on the purchase unit</td>
+</tr>
+<tr>
+<td>Shopify</td>
+<td>Cart/note attribute named <code>attribution_token</code></td>
+</tr>
+<tr>
+<td>Zenoti</td>
+<td>Appointment notes containing <code>attribution_token:&lt;token&gt;</code></td>
+</tr>
+<tr>
+<td>Your own system</td>
+<td><code>checkoutToken</code> field of <code>POST /v1/orders</code></td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>Stripe Checkout tip:</strong> put the token on the PaymentIntent too (<code>payment_intent_data.metadata</code>). Stripe may deliver <code>payment_intent.succeeded</code> before <code>checkout.session.completed</code>; the first event creates the order, so the token must be present on that first event.</p>
+</blockquote>
+<h3 id="83-events-handled">8.3 Events handled</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Gateway</th>
+<th>Orders</th>
+<th>Refunds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Stripe</td>
+<td><code>payment_intent.succeeded</code>, <code>checkout.session.completed</code>, <code>checkout.session.async_payment_succeeded</code></td>
+<td><code>charge.refunded</code> (every refund on the charge), <code>charge.refund.updated</code></td>
+</tr>
+<tr>
+<td>PayPal</td>
+<td><code>PAYMENT.CAPTURE.COMPLETED</code></td>
+<td><code>PAYMENT.CAPTURE.REFUNDED</code></td>
+</tr>
+<tr>
+<td>Razorpay</td>
+<td><code>payment.captured</code>, <code>order.paid</code></td>
+<td><code>refund.processed</code></td>
+</tr>
+</tbody>
+</table></div>
+<p>A refund that arrives <strong>before</strong> its order fails with a clear message and is kept; replay it once the order exists.</p>
+<h3 id="84-shopify-zenoti-and-generic-connectors">8.4 Shopify, Zenoti and generic connectors</h3>
+<ul>
+<li><strong>Shopify</strong> (<code>orders/paid</code>, <code>orders/create</code>, <code>refunds/create</code>) and <strong>Zenoti</strong> (appointments, invoices) are created with <code>POST /api/workspace/connectors</code> (<code>type</code>, <code>name</code>, and the shared secret in <code>config</code>). The response returns the webhook URL to register in that system.</li>
+<li><strong>Generic</strong> (<code>generic</code>, <code>woocommerce</code>, <code>square</code>) lets <strong>any system</strong> integrate without code on our side: configure a signature secret and a <code>fieldMap</code> that points to where <code>externalId</code>, <code>orderedAt</code>, <code>currency</code>, <code>grossAmount</code>, <code>email</code>, <code>checkoutToken</code>, … sit in your payload.</li>
+<li>Webhook URLs look like <code>https://api.example.com/api/connectors/&lt;type&gt;/webhook/&lt;connectorId&gt;</code>.</li>
+<li>Updating a connector (<code>PATCH</code>) <strong>merges</strong> the config you send (secrets are re-encrypted); send a key as <code>null</code> to remove it.</li>
+</ul>
+<h3 id="85-what-the-platform-guarantees-for-connectors">8.5 What the platform guarantees for connectors</h3>
+<ul>
+<li>The raw payload is stored <strong>before</strong> processing; a failure never loses an event.</li>
+<li>Signatures are always verified (Stripe timestamp + HMAC, Razorpay/Shopify/Zenoti/generic HMAC, PayPal's verification API).</li>
+<li>Duplicate deliveries never create duplicate orders or refunds.</li>
+<li>A suspended company's connectors acknowledge and ignore events.</li>
+</ul>
+<hr />
+<h2 id="9-outbound-webhooks">9. Outbound webhooks</h2>
+<p>Get notified when something happens. Manage endpoints at <code>/api/workspace/webhooks</code> (company admin):</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Call</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /api/workspace/webhooks</code></td>
+<td><code>{ "url": "https://you.example.com/hook", "eventTypes": ["order.created"] }</code> → returns a <strong><code>signingSecret</code> shown once</strong></td>
+</tr>
+<tr>
+<td><code>GET</code>, <code>PATCH /:id</code>, <code>DELETE /:id</code></td>
+<td>List / change / remove endpoints</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Event types:</strong> <code>order.created</code>, <code>order.updated</code>, <code>booking.created</code>, <code>booking.updated</code>, <code>refund.created</code>.</p>
+<p><strong>Delivery</strong> is a <code>POST</code> with JSON body:</p>
+<pre><code class="language-json">{ &quot;id&quot;: &quot;evt-uuid&quot;, &quot;type&quot;: &quot;order.created&quot;, &quot;createdAt&quot;: &quot;2026-03-01T15:45:01.000Z&quot;,
+  &quot;workspaceId&quot;: &quot;…&quot;, &quot;data&quot;: { &quot;orderId&quot;: &quot;…&quot;, &quot;externalId&quot;: &quot;order_12345&quot;, &quot;status&quot;: &quot;paid&quot;, &quot;matchMethod&quot;: &quot;token&quot;, &quot;...&quot;: &quot;...&quot; } }
+</code></pre>
+<p>Headers: <code>X-Webhook-Signature</code>, <code>X-Webhook-Timestamp</code> (milliseconds), <code>X-Webhook-Event</code>, <code>User-Agent: AttributionPlatform-Webhook/1.0</code>.</p>
+<p><strong>Verify the signature</strong> — it is the hex HMAC-SHA256 of the <strong>raw request body</strong> using your signing secret.</p>
+<p>Node.js:</p>
+<pre><code class="language-js">import crypto from &quot;node:crypto&quot;;
+app.post(&quot;/hook&quot;, express.raw({ type: &quot;application/json&quot; }), (req, res) =&gt; {
+  const expected = crypto.createHmac(&quot;sha256&quot;, process.env.WEBHOOK_SECRET).update(req.body).digest(&quot;hex&quot;);
+  const given = String(req.headers[&quot;x-webhook-signature&quot;] || &quot;&quot;);
+  const ok = given.length === expected.length &amp;&amp;
+             crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+  if (!ok) return res.status(401).end();
+  const event = JSON.parse(req.body);   // handle event, then:
+  res.status(200).end();
+});
+</code></pre>
+<p>Python:</p>
+<pre><code class="language-python">import hmac, hashlib
+def valid(raw_body: bytes, header: str, secret: str) -&gt; bool:
+    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, header or &quot;&quot;)
+</code></pre>
+<p><strong>Delivery rules</strong>
+- Respond with a <code>2xx</code> within <strong>10 seconds</strong>. Failures are retried up to <strong>3 times</strong> (about 1 s, 5 s, 15 s apart).
+- After <strong>10 consecutive failures</strong> the endpoint is disabled automatically.
+- Deliveries are <strong>at-least-once</strong>: de-duplicate on the event <code>id</code>.
+- The timestamp header is <strong>not part of the signed content</strong>; rely on the signature and the event <code>id</code>, not the timestamp, to reject replays.</p>
+<hr />
+<h2 id="10-how-attribution-works">10. How attribution works</h2>
+<ol>
+<li><strong>Collect.</strong> Every visit is stored as a touch. Nothing is overwritten.</li>
+<li><strong>Freeze.</strong> The checkout token snapshots the touches that existed when checkout began.</li>
+<li><strong>Match.</strong> When the order arrives the platform uses, in order: the <strong>token</strong>, then a <strong>click ID</strong> in the payload, then <strong>email/phone</strong> linked to a known visitor, otherwise <strong>none</strong>.</li>
+<li><strong>Filter.</strong> Only touches inside the <strong>lookback window</strong> count (default <strong>30 days</strong>, configurable per channel type). If a paid click exists, direct visits are dropped.</li>
+<li><strong>Credit.</strong> Each model splits the order's net revenue across the remaining touches.</li>
+</ol>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Credit rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>first_touch</code></td>
+<td>100% to the first touch</td>
+</tr>
+<tr>
+<td><code>last_touch</code></td>
+<td>100% to the last touch</td>
+</tr>
+<tr>
+<td><code>last_non_direct</code> <em>(default)</em></td>
+<td>100% to the last touch that is not direct</td>
+</tr>
+<tr>
+<td><code>linear</code></td>
+<td>Equal share to every touch</td>
+</tr>
+<tr>
+<td><code>time_decay</code></td>
+<td>More credit to touches closer to the order (half-life 7 days)</td>
+</tr>
+<tr>
+<td><code>position_based</code></td>
+<td>40% first, 40% last, 20% shared across the middle</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Example.</strong> Meta click → Google click → purchase: first touch = Meta, last touch = Google, linear = 50% / 50%.</p>
+<p><strong>Customer merging.</strong> If two customer records are the same person, a company admin can merge them (<code>POST /api/workspace/customers/merge</code> with <code>{ "sourceId", "targetId" }</code>). Visits, orders and bookings combine under the target, and <strong>new vs returning is recalculated</strong> over the combined history. Credit already given to past orders is not recalculated by a merge.</p>
+<hr />
+<h2 id="11-metric-definitions">11. Metric definitions</h2>
+<p>One definition per metric, used identically in the dashboard, API and exports.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gross revenue</td>
+<td>Sum of paid order totals before discounts and refunds, excluding tax</td>
+</tr>
+<tr>
+<td>Discounts</td>
+<td>Total discounts applied to paid orders</td>
+</tr>
+<tr>
+<td>Refunds</td>
+<td>Refund amounts, counted <strong>on the refund date</strong>, linked to the original order</td>
+</tr>
+<tr>
+<td>Net revenue</td>
+<td>Gross − discounts − refunds</td>
+</tr>
+<tr>
+<td>Orders</td>
+<td>Count of paid orders (unpaid or voided are excluded)</td>
+</tr>
+<tr>
+<td>Average order value</td>
+<td>Net revenue ÷ orders</td>
+</tr>
+<tr>
+<td><strong>New customer</strong></td>
+<td>A customer whose order is their <strong>first paid order</strong> in the company, by order time after identity resolution. An order that was later refunded still counts as an earlier paid order</td>
+</tr>
+<tr>
+<td><strong>Returning customer</strong></td>
+<td>A customer with at least one earlier paid order</td>
+</tr>
+<tr>
+<td>Repeat rate</td>
+<td>Customers with 2+ paid orders ÷ customers with 1+, in the period</td>
+</tr>
+<tr>
+<td>Attributed revenue</td>
+<td>Net revenue × the credit share under the selected model</td>
+</tr>
+<tr>
+<td>Attribution coverage</td>
+<td>Revenue with a known source ÷ total revenue</td>
+</tr>
+<tr>
+<td>Booked value</td>
+<td>Sum of service prices on bookings with status scheduled or confirmed</td>
+</tr>
+<tr>
+<td>Realized revenue</td>
+<td>Net revenue from paid orders</td>
+</tr>
+<tr>
+<td>Cancellation rate</td>
+<td>Cancelled bookings ÷ created bookings in the period</td>
+</tr>
+<tr>
+<td>Lead time</td>
+<td>Appointment start − booking created time</td>
+</tr>
+<tr>
+<td>Days to convert</td>
+<td>First touch time to order time</td>
+</tr>
+</tbody>
+</table></div>
+<p>New-vs-returning is decided when the order is ingested and stored on the order; it is recomputed only on a customer merge or a backfill.</p>
+<hr />
+<h2 id="12-time-currency-and-money-rules">12. Time, currency and money rules</h2>
+<ul>
+<li><strong>A day is your company's local day</strong>, in your IANA timezone (for example <code>Asia/Kolkata</code>). "Last 7 days" means the 7 local days ending today, with today included.</li>
+<li>Reports honour <strong>daylight-saving changes</strong>: a local day can be 23 or 25 hours long, and its boundaries are always local midnight.</li>
+<li><code>from=2026-03-02&amp;to=2026-03-02</code> means the whole local day of 2 March. Send full ISO timestamps if you need exact instants.</li>
+<li>All timestamps are stored and returned in <strong>UTC (ISO-8601)</strong>.</li>
+<li>Money is stored as <strong>integer minor units</strong> plus a currency code; API responses return minor units as strings.</li>
+<li><strong>Tax is excluded</strong> from revenue unless your company chooses otherwise.</li>
+<li>Refunds reduce revenue on the <strong>refund date</strong>.</li>
+</ul>
+<hr />
+<h2 id="13-team-roles-privacy-and-support-access">13. Team, roles, privacy and support access</h2>
+<h3 id="roles">Roles</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Can do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Company admin</strong></td>
+<td>Manage team, sites, locations, API keys, connectors, webhooks, settings; see all data</td>
+</tr>
+<tr>
+<td><strong>Company viewer</strong></td>
+<td>Read-only dashboard, optionally limited to certain locations</td>
+</tr>
+<tr>
+<td><strong>Platform support</strong></td>
+<td>Our staff. See the next section</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="platform-support-access-is-transparent">Platform support access is transparent</h3>
+<p>Our support staff can open your dashboard <strong>only inside a support session</strong>:
+- a <strong>written reason</strong> (at least 10 characters) is required,
+- the session is <strong>short-lived</strong> (30 minutes by default, 2 hours at most) and can be ended early,
+- <strong>personal data is masked by default</strong> — unmasking must be requested explicitly and is flagged,
+- you can see every session — who, why, when it started and ended, whether data was masked:</p>
+<pre><code>GET /api/workspace/support-access        (company admin)
+</code></pre>
+<pre><code class="language-json">{ &quot;data&quot;: [ { &quot;id&quot;: &quot;…&quot;, &quot;supportAgent&quot;: &quot;Asha (Support)&quot;, &quot;reason&quot;: &quot;Investigating ticket 4821&quot;,
+              &quot;maskPii&quot;: true, &quot;startedAt&quot;: &quot;…&quot;, &quot;expiresAt&quot;: &quot;…&quot;, &quot;endedAt&quot;: null } ] }
+</code></pre>
+<h3 id="privacy-and-security">Privacy and security</h3>
+<ul>
+<li>Email and phone are stored <strong>hashed</strong> for matching; email is also kept <strong>encrypted</strong>. Secrets (gateway credentials, signing secrets) are encrypted at rest.</li>
+<li>Every request is scoped to your company by your key or login. One company can never read another's data.</li>
+<li>API keys and webhook secrets are shown <strong>once</strong>. Rotate if exposed.</li>
+<li>Collect visits only after consent where the law requires it (GDPR, UK GDPR, DPDP, CCPA): load the tracking snippet after the visitor consents.</li>
+</ul>
+<hr />
+<h2 id="14-errors-troubleshooting-and-checklist">14. Errors, troubleshooting and checklist</h2>
+<h3 id="status-codes">Status codes</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Code</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>200</code> / <code>201</code></td>
+<td>Success / created</td>
+</tr>
+<tr>
+<td><code>400</code></td>
+<td>Invalid input (the <code>message</code> says which field) — including bad dates or timezone</td>
+</tr>
+<tr>
+<td><code>401</code></td>
+<td>Missing, invalid or revoked key / not signed in</td>
+</tr>
+<tr>
+<td><code>403</code></td>
+<td>Wrong key type for this route, origin not allowed, site not verified, workspace not active, or missing permission</td>
+</tr>
+<tr>
+<td><code>404</code></td>
+<td>Not found in <strong>your</strong> workspace</td>
+</tr>
+<tr>
+<td><code>409</code></td>
+<td>Conflict (already exists / already merged / connector has data)</td>
+</tr>
+<tr>
+<td><code>422</code></td>
+<td>The gateway or downstream rule refused the request</td>
+</tr>
+<tr>
+<td><code>429</code></td>
+<td>Rate limit exceeded — wait <code>Retry-After</code> seconds</td>
+</tr>
+<tr>
+<td><code>502</code></td>
+<td>A payment gateway could not be reached — retry</td>
+</tr>
+<tr>
+<td><code>500</code></td>
+<td>Unexpected error — safe to retry idempotent calls</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="common-problems">Common problems</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Cause and fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>403 Origin not allowed for this key</code></td>
+<td>Add the exact origin (<code>https://shop.example.com</code>, no path) to the key's <code>allowedOrigins</code>, or call from the right site</td>
+</tr>
+<tr>
+<td><code>403 Origin header required</code></td>
+<td>Live publishable keys must be called from a browser. Use a test key for curl/Postman</td>
+</tr>
+<tr>
+<td><code>403 Site is not verified yet</code></td>
+<td>Complete domain verification (section 2, step 2)</td>
+</tr>
+<tr>
+<td><code>403 This key type cannot call this route</code></td>
+<td>Reads, refunds and edits need a <strong>secret</strong> key</td>
+</tr>
+<tr>
+<td><code>403 Workspace is not active</code></td>
+<td>The company is suspended or closed — contact support</td>
+</tr>
+<tr>
+<td>Orders show <code>matchMethod: none</code></td>
+<td>The token did not reach the payment system. Check the field in <a href="#82-where-to-put-the-checkout-token">8.2</a> and that the token has not expired (2 h)</td>
+</tr>
+<tr>
+<td>Connector stuck on <code>pending</code></td>
+<td>No signed event has arrived yet. Run <strong>verify</strong>, confirm the webhook in the gateway dashboard points to the connector's URL, and make a test payment</td>
+</tr>
+<tr>
+<td>Connector <code>failing</code></td>
+<td>Open the event log, filter <code>failed</code>, read each event's error, fix the cause, then <strong>replay</strong></td>
+</tr>
+<tr>
+<td>Refund event failed with "Order not found"</td>
+<td>The refund arrived before the order. Replay it after the order is recorded</td>
+</tr>
+<tr>
+<td>Revenue differs between a list and a report</td>
+<td>Check both use the same <code>tz</code> and <code>model</code>; <code>from</code>/<code>to</code> as dates are whole local days</td>
+</tr>
+<tr>
+<td><code>409 already_connected</code></td>
+<td>That Stripe/PayPal account is already connected — use <strong>reconnect</strong> on the existing connector</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="go-live-checklist">Go-live checklist</h3>
+<ul>
+<li>[ ] Company registered and email verified</li>
+<li>[ ] Site added and <strong>verified</strong></li>
+<li>[ ] Publishable key (with allowed origins) and secret key created and stored safely</li>
+<li>[ ] Tracking snippet on every page; visits appear</li>
+<li>[ ] Checkout token passed into the payment/booking system</li>
+<li>[ ] Gateway connected; connector turned <strong>healthy</strong></li>
+<li>[ ] Test purchase shows <code>matchMethod: token</code> and the right channel</li>
+<li>[ ] Test refund reduces revenue on its date</li>
+<li>[ ] Timezone, currency, default model and lookback window set</li>
+<li>[ ] Team invited with the right roles</li>
+<li>[ ] Webhook endpoint (optional) created and signature verification tested</li>
+</ul>
+</main></body></html>
