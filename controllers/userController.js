@@ -1,3 +1,8 @@
+/**
+ * Self-service profile and company-detail changes for the authenticated user.
+ * The workspace is taken from the session, and editable fields are deliberately whitelisted before updating.
+ */
+
 import { db } from "../src/prisma/db.js";
 import bcrypt from 'bcryptjs';
 

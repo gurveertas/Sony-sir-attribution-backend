@@ -1,3 +1,9 @@
+/**
+ * Account lifecycle: company registration, login, email verification, and password recovery.
+ * Successful login and registration establish the httpOnly user_token cookie used by dashboard routes.
+ * Keep token and password handling here deliberately separate from API-key authentication.
+ */
+
 import bcrypt from "bcryptjs";
 import genSlug from "../utils/genSlug.js";
 import { db } from "../src/prisma/db.js";

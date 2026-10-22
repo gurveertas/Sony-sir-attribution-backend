@@ -1,3 +1,9 @@
+/**
+ * API key lifecycle for browser SDK and server-to-server integrations.
+ * Keys are stored as hashes; the plaintext is returned only at creation or rotation.
+ * Workspace ownership comes from the authenticated dashboard user, never from the request body.
+ */
+
 import crypto from "crypto";
 import { db } from "../src/prisma/db.js";
 import { writeAudit } from "../services/audit.js";

@@ -1,4 +1,10 @@
 /**
+ * Refund ingestion for an existing order.
+ * The handler links the refund idempotently to the original order, updates refunded totals and status,
+ * and relies on secret-key or verified connector authorization rather than browser trust.
+ */
+
+/**
  * Refunds Controller  —  POST /v1/refunds
  *
  * Records a refund, links it to the original order, and updates

@@ -1,4 +1,10 @@
 /**
+ * Browser tracking endpoints: record touches, identify visitors, and freeze checkout sessions.
+ * The API-key middleware supplies the workspace; visitor-supplied workspace IDs must never be trusted.
+ * Checkout sessions snapshot touches so later visits cannot change an already-started conversion's context.
+ */
+
+/**
  * POST /v1/touches
  *
  * Records a visitor touch (page view with attribution data).

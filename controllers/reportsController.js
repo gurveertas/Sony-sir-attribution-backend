@@ -1,4 +1,10 @@
 /**
+ * Workspace analytics and report endpoints.
+ * Report dates are resolved in the workspace timezone, then credits and transactions are aggregated
+ * under the requested attribution model and filters.
+ */
+
+/**
  * Reports Controller  —  GET /v1/reports/*
  *
  * High-performance reporting engine with database-level date filtering

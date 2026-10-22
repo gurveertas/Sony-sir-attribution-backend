@@ -1,4 +1,10 @@
 /**
+ * Booking ingestion and lifecycle updates.
+ * A booking follows the same identity and attribution pipeline as an order, but is attributed when created.
+ * Dashboard requests use req.user; public API requests use the workspace resolved by API-key middleware.
+ */
+
+/**
  * Bookings Controller  —  POST /v1/bookings  |  PATCH /v1/bookings/:id
  *
  * Same attribution pipeline as orders, but for bookings.

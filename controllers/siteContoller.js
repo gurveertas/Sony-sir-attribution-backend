@@ -1,3 +1,9 @@
+/**
+ * Website registration and ownership verification.
+ * A site must be verified through DNS or a meta tag before live publishable keys can be used for it.
+ * Verification fetches are guarded because the submitted domain is external input.
+ */
+
 import crypto from "crypto";
 import dns from "dns/promises";
 import net from "net";

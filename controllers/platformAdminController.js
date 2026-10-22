@@ -1,3 +1,9 @@
+/**
+ * Cross-workspace platform administration.
+ * Routes are protected by platform-admin authorization; every mutation still validates the target workspace
+ * and records an audit reason so administrative actions remain reviewable.
+ */
+
 
 import { db } from "../src/prisma/db.js";
 import { writeAudit } from "../services/audit.js";

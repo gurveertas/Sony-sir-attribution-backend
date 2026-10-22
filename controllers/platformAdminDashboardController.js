@@ -1,3 +1,8 @@
+/**
+ * Read-only aggregate data for the platform administrator dashboard.
+ * Unlike company reports, these queries intentionally span workspaces and must remain admin-only.
+ */
+
 import { db } from "../src/prisma/db.js";
 import { getDashboardOverview, getSummaryReport, getCampaignsReport, getChannelsReport, getLocationsReport, getTrendReport, getCustomersReport} from "./reportsController.js";
 import { listCustomers } from "./customerController.js";

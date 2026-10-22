@@ -1,4 +1,10 @@
 /**
+ * Customer lists, journeys, and customer merging.
+ * Customer data is always workspace-scoped; journey responses combine touches, orders, bookings, credits, and refunds.
+ * Merging is a transactional identity operation that preserves attribution history while tombstoning the source customer.
+ */
+
+/**
  * Customers Controller  —  GET /v1/customers  |  GET /v1/customers/:id/journey
  *
  * Customer and attribution journey endpoints are shared by the API-key and

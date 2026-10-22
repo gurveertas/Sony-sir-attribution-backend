@@ -1,4 +1,10 @@
 /**
+ * Order ingestion, updates, listing, and attribution details.
+ * Creation resolves the customer, finds the best touch source, computes all attribution models,
+ * and writes the order plus credits atomically so partial revenue records are not visible.
+ */
+
+/**
  * Orders & Conversions Controller  —  POST /v1/orders  |  PATCH /v1/orders/:id
  *
  * Ingests a paid order, resolves its customer, matches it to attribution touches,

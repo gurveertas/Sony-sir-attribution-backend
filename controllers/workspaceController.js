@@ -1,4 +1,9 @@
 /**
+ * Company workspace administration: settings, team, locations, rules, webhooks, and audit history.
+ * Middleware establishes the user and role; handlers must still scope every database operation to that workspace.
+ */
+
+/**
  * Workspace Settings Controller  —  /api/workspace/*
  *
  * Company admins manage their workspace settings, team invites,

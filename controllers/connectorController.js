@@ -1,4 +1,11 @@
 /**
+ * Inbound provider webhook handlers.
+ * Each handler verifies the provider signature, saves the raw event, normalizes provider data,
+ * and then delegates to the shared order, booking, or refund pipeline.
+ * Saving the raw event first is what makes failed deliveries replayable.
+ */
+
+/**
  * Connector Webhook Controllers
  *
  * Each connector:

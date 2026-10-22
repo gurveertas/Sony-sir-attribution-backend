@@ -1,4 +1,10 @@
 /**
+ * Company-facing connector administration and event replay.
+ * These handlers manage connector configuration and expose event status without leaking secrets or raw payloads by default.
+ * Every lookup must remain scoped to the authenticated user's workspace.
+ */
+
+/**
  * Connector Management Controller  —  /api/workspace/connectors/*
  *
  * Company admins create and manage their inbound connectors

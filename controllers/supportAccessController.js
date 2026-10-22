@@ -1,4 +1,10 @@
 /**
+ * Temporary platform-support access sessions.
+ * Sessions are scoped to a workspace, expire automatically, default to masked PII, and create audit entries.
+ * The session requirement prevents an administrator from silently browsing company data.
+ */
+
+/**
  * Support sessions.
  *
  *   Platform admin  POST /api/platform-admin/support-sessions            start (reason required)
