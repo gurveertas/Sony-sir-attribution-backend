@@ -14,6 +14,7 @@ const tools = await import("../controllers/workspaceToolsController.js");
 const platform = await import("../controllers/platformToolsController.js");
 const keys = await import("../controllers/apiKeyController.js");
 const reports = await import("../controllers/reportsController.js");
+const workspace = await import("../controllers/workspaceController.js");
 const { idempotency, recordRawEvent } = await import("../middlewares/apiWrite.js");
 const { createOrder } = await import("../controllers/orderController.js");
 const { ingestOrder } = await import("../services/ingestion.js");
@@ -41,6 +42,17 @@ const call = async (fn, req) => {
     await fn({ headers: {}, ip: "1.2.3.4", query: {}, params: {}, body: {}, ...req }, res);
     return res;
 };
+
+test("company admins can update documented workspace settings without changing unsupported fields", async () => {
+    const res = await call(workspace.updateWorkspaceSettings, {
+        user: admin(),
+        body: { industry: "Retail", plan: "enterprise" },
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(T.Workspace[0].industry, "Retail");
+    assert.equal(T.Workspace[0].plan, undefined);
+});
 
 // ── user management ─────────────────────────────────────────────────────────
 test("company admins can only manage their own company's users and can never create or grant platform_admin", async () => {

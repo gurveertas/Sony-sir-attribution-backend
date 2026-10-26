@@ -31,6 +31,20 @@ const orm = () => db.orm.public;
 // Settings
 // ────────────────────────────────────────
 
+const ALLOWED_SETTINGS = new Set([
+    "name",
+    "timezone",
+    "weekStart",
+    "reportingCurrency",
+    "industry",
+    "websiteUrl",
+    "defaultModel",
+    "lookbackDays",
+    "lookbackOverrides",
+    "consentMode",
+    "rawRetentionMonths",
+]);
+
 /**
  * GET /api/workspace/settings
  */
@@ -822,4 +836,3 @@ export const getAuditLog = async (req, res) => {
         return res.status(500).json({ message: "Internal server error" });
     }
 };
-
