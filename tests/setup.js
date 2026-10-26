@@ -2,7 +2,6 @@
 process.env.JWT_SECRET ??= "test-jwt-secret";
 process.env.DATABASE_PUBLIC_URL ??= "postgres://user:pass@localhost:5432/test";
 process.env.PORT ??= "5000";
-process.env.RESEND_API_KEY ??= "re_test";
 process.env.NODE_ENV ??= "test";
 process.env.APP_API_URL = "https://api.example.com";
 

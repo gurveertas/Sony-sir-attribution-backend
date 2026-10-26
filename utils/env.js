@@ -13,10 +13,6 @@ if (!process.env.PORT) {
     console.error("port missing from env");
     throw new Error("port missing from env");
 }
-if (!process.env.RESEND_API_KEY) {
-    console.error("resend api missing from env");
-    throw new Error("resend api missing from env");
-}
 if (!process.env.EMAIL_FROM) {
     console.warn("[config] EMAIL_FROM is not set: outgoing emails may be rejected.");
 }
@@ -29,8 +25,14 @@ const ENV = {
     DATABASE_PUBLIC_URL : process.env.DATABASE_PUBLIC_URL,
     JWT_SECRET : process.env.JWT_SECRET,
     PORT : process.env.PORT,
-    RESEND_API_KEY: process.env.RESEND_API_KEY,
     EMAIL_FROM : process.env.EMAIL_FROM,
+    SMTP_HOST: process.env.SMTP_HOST,
+    SMTP_PORT: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
+    SMTP_USER: process.env.SMTP_USER,
+    SMTP_PASS: process.env.SMTP_PASS,
+    SMTP_SECURE: process.env.SMTP_SECURE === undefined
+        ? undefined
+        : String(process.env.SMTP_SECURE).toLowerCase() === "true",
     NODE_ENV: process.env.NODE_ENV,
     // Dedicated key for encrypting stored secrets (gateway credentials, webhook secrets).
     // Optional for backward compatibility: when unset, JWT_SECRET is used (legacy behaviour).

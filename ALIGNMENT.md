@@ -20,9 +20,11 @@ SSO, other languages) are not built.
    npx prisma migration apply
 
    # Option B: the ready-made SQL (when you cannot run the Prisma planner against the database)
-   psql "$DATABASE_PUBLIC_URL" -v ON_ERROR_STOP=1 -1 -f migrations/manual/20261026_v1_scope.sql
+   psql "$DATABASE_PUBLIC_URL" -v ON_ERROR_STOP=1 -1 -f manual-migrations/20261026_v1_scope.sql
    ```
-   `migrations/manual/20261026_v1_scope.sql` is generated from `contract.prisma`. It was run against
+   `manual-migrations/20261026_v1_scope.sql` is generated from `contract.prisma`. It is kept outside
+   Prisma's managed `migrations/` directory because that directory is reserved for declared contract
+   spaces. It was run against
    PostgreSQL 16 on a database built from the existing migrations (`migrations/app/*`), then run a
    second time to confirm it changes nothing. Every statement is guarded (`IF NOT EXISTS`), so it is
    safe on a database that already has some of the tables. Use A or B, not both: after B, Prisma's

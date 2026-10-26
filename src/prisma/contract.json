@@ -4,12 +4,28 @@
   "target": "postgres",
   "profileHash": "3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2",
   "roots": {
+    "AdAccount": {
+      "model": "AdAccount",
+      "namespace": "public"
+    },
+    "AdSpend": {
+      "model": "AdSpend",
+      "namespace": "public"
+    },
     "ApiKey": {
       "model": "ApiKey",
       "namespace": "public"
     },
     "AttributionCredit": {
       "model": "AttributionCredit",
+      "namespace": "public"
+    },
+    "AuditLog": {
+      "model": "AuditLog",
+      "namespace": "public"
+    },
+    "BackgroundJob": {
+      "model": "BackgroundJob",
       "namespace": "public"
     },
     "Booking": {
@@ -34,6 +50,22 @@
     },
     "Customer": {
       "model": "Customer",
+      "namespace": "public"
+    },
+    "DailyAttributionRollup": {
+      "model": "DailyAttributionRollup",
+      "namespace": "public"
+    },
+    "DailyRollup": {
+      "model": "DailyRollup",
+      "namespace": "public"
+    },
+    "FxRate": {
+      "model": "FxRate",
+      "namespace": "public"
+    },
+    "IdempotencyKey": {
+      "model": "IdempotencyKey",
       "namespace": "public"
     },
     "Industry": {
@@ -68,6 +100,10 @@
       "model": "Refund",
       "namespace": "public"
     },
+    "RollupDirtyDay": {
+      "model": "RollupDirtyDay",
+      "namespace": "public"
+    },
     "Session": {
       "model": "Session",
       "namespace": "public"
@@ -94,6 +130,10 @@
     },
     "Visitor": {
       "model": "Visitor",
+      "namespace": "public"
+    },
+    "WebhookDelivery": {
+      "model": "WebhookDelivery",
       "namespace": "public"
     },
     "WebhookEndpoint": {
@@ -127,6 +167,23 @@
               {
                 "name": "system",
                 "value": "system"
+              }
+            ]
+          },
+          "AdPlatform": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "meta",
+                "value": "meta"
+              },
+              {
+                "name": "google",
+                "value": "google"
+              },
+              {
+                "name": "other",
+                "value": "other"
               }
             ]
           },
@@ -182,6 +239,27 @@
               {
                 "name": "position_based",
                 "value": "position_based"
+              }
+            ]
+          },
+          "BackgroundJobStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "queued",
+                "value": "queued"
+              },
+              {
+                "name": "running",
+                "value": "running"
+              },
+              {
+                "name": "done",
+                "value": "done"
+              },
+              {
+                "name": "dead",
+                "value": "dead"
               }
             ]
           },
@@ -326,6 +404,10 @@
                 "value": "token"
               },
               {
+                "name": "visitor_id",
+                "value": "visitor_id"
+              },
+              {
                 "name": "click_id",
                 "value": "click_id"
               },
@@ -436,9 +518,30 @@
               }
             ]
           },
+          "WebhookDeliveryStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "pending",
+                "value": "pending"
+              },
+              {
+                "name": "succeeded",
+                "value": "succeeded"
+              },
+              {
+                "name": "failed",
+                "value": "failed"
+              }
+            ]
+          },
           "WorkspaceStatus": {
             "codecId": "pg/text@1",
             "members": [
+              {
+                "name": "pending",
+                "value": "pending"
+              },
               {
                 "name": "active",
                 "value": "active"
@@ -455,6 +558,440 @@
           }
         },
         "models": {
+          "AdAccount": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "credentialsEnc": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/bytea@1",
+                  "kind": "scalar"
+                }
+              },
+              "currency": {
+                "nullable": true,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 3
+                  }
+                }
+              },
+              "externalAccountId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastError": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastSyncedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "name": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "platform": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "AdPlatform",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "ConnectorStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "timezone": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "workspaceId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "spend": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "adAccountId"
+                  ]
+                },
+                "to": {
+                  "model": "AdSpend",
+                  "namespace": "public"
+                }
+              },
+              "workspace": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "workspaceId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Workspace",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "credentialsEnc": {
+                  "column": "credentialsEnc"
+                },
+                "currency": {
+                  "column": "currency"
+                },
+                "externalAccountId": {
+                  "column": "externalAccountId"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "lastError": {
+                  "column": "lastError"
+                },
+                "lastSyncedAt": {
+                  "column": "lastSyncedAt"
+                },
+                "name": {
+                  "column": "name"
+                },
+                "platform": {
+                  "column": "platform"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "timezone": {
+                  "column": "timezone"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "workspaceId": {
+                  "column": "workspaceId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "AdAccount"
+            }
+          },
+          "AdSpend": {
+            "fields": {
+              "adAccountId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "adName": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "adSetName": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "campaignId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "campaignName": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "channel": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "clicks": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "currency": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 3
+                  }
+                }
+              },
+              "date": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 10
+                  }
+                }
+              },
+              "dedupeKey": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "impressions": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "locationId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "platform": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "AdPlatform",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "source": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "spendMinorUnits": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int8@1",
+                  "kind": "scalar"
+                }
+              },
+              "updatedAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "workspaceId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "adAccount": {
+                "cardinality": "N:1",
+                "nullable": true,
+                "on": {
+                  "localFields": [
+                    "adAccountId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "AdAccount",
+                  "namespace": "public"
+                }
+              },
+              "workspace": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "workspaceId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Workspace",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "adAccountId": {
+                  "column": "adAccountId"
+                },
+                "adName": {
+                  "column": "adName"
+                },
+                "adSetName": {
+                  "column": "adSetName"
+                },
+                "campaignId": {
+                  "column": "campaignId"
+                },
+                "campaignName": {
+                  "column": "campaignName"
+                },
+                "channel": {
+                  "column": "channel"
+                },
+                "clicks": {
+                  "column": "clicks"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "currency": {
+                  "column": "currency"
+                },
+                "date": {
+                  "column": "date"
+                },
+                "dedupeKey": {
+                  "column": "dedupeKey"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "impressions": {
+                  "column": "impressions"
+                },
+                "locationId": {
+                  "column": "locationId"
+                },
+                "platform": {
+                  "column": "platform"
+                },
+                "source": {
+                  "column": "source"
+                },
+                "spendMinorUnits": {
+                  "column": "spendMinorUnits"
+                },
+                "updatedAt": {
+                  "column": "updatedAt"
+                },
+                "workspaceId": {
+                  "column": "workspaceId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "AdSpend"
+            }
+          },
           "ApiKey": {
             "fields": {
               "allowedOrigins": {
@@ -693,6 +1230,20 @@
                   "kind": "scalar"
                 }
               },
+              "campaign": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "channel": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "createdAt": {
                 "nullable": false,
                 "type": {
@@ -731,6 +1282,13 @@
                 }
               },
               "orderId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "reasonCode": {
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
@@ -833,6 +1391,12 @@
                 "bookingId": {
                   "column": "bookingId"
                 },
+                "campaign": {
+                  "column": "campaign"
+                },
+                "channel": {
+                  "column": "channel"
+                },
                 "createdAt": {
                   "column": "createdAt"
                 },
@@ -848,6 +1412,9 @@
                 "orderId": {
                   "column": "orderId"
                 },
+                "reasonCode": {
+                  "column": "reasonCode"
+                },
                 "share": {
                   "column": "share"
                 },
@@ -862,6 +1429,307 @@
               "table": "AttributionCredit"
             }
           },
+          "AuditLog": {
+            "fields": {
+              "action": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "actorType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "ActorType",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "actorUserId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "ip": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "metadata": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "reason": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "targetId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "targetType": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "userAgent": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "workspaceId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "workspace": {
+                "cardinality": "N:1",
+                "nullable": true,
+                "on": {
+                  "localFields": [
+                    "workspaceId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Workspace",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "action": {
+                  "column": "action"
+                },
+                "actorType": {
+                  "column": "actorType"
+                },
+                "actorUserId": {
+                  "column": "actorUserId"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "ip": {
+                  "column": "ip"
+                },
+                "metadata": {
+                  "column": "metadata"
+                },
+                "reason": {
+                  "column": "reason"
+                },
+                "targetId": {
+                  "column": "targetId"
+                },
+                "targetType": {
+                  "column": "targetType"
+                },
+                "userAgent": {
+                  "column": "userAgent"
+                },
+                "workspaceId": {
+                  "column": "workspaceId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "AuditLog"
+            }
+          },
+          "BackgroundJob": {
+            "fields": {
+              "attempts": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "dedupeKey": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "finishedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "lastError": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "lockedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "lockedBy": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "nextAttemptAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "payload": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "BackgroundJobStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "type": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "workspaceId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "attempts": {
+                  "column": "attempts"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "dedupeKey": {
+                  "column": "dedupeKey"
+                },
+                "finishedAt": {
+                  "column": "finishedAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "lastError": {
+                  "column": "lastError"
+                },
+                "lockedAt": {
+                  "column": "lockedAt"
+                },
+                "lockedBy": {
+                  "column": "lockedBy"
+                },
+                "nextAttemptAt": {
+                  "column": "nextAttemptAt"
+                },
+                "payload": {
+                  "column": "payload"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "type": {
+                  "column": "type"
+                },
+                "workspaceId": {
+                  "column": "workspaceId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "BackgroundJob"
+            }
+          },
           "Booking": {
             "fields": {
               "appointmentEndAt": {
@@ -873,6 +1741,20 @@
               },
               "appointmentStartAt": {
                 "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "attributionReason": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "bookedAt": {
+                "nullable": true,
                 "type": {
                   "codecId": "pg/timestamptz-string@1",
                   "kind": "scalar"
@@ -945,6 +1827,13 @@
                 }
               },
               "isNewCustomer": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "isTest": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/bool@1",
@@ -1077,6 +1966,21 @@
                   "namespace": "public"
                 }
               },
+              "orders": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "bookingId"
+                  ]
+                },
+                "to": {
+                  "model": "Order",
+                  "namespace": "public"
+                }
+              },
               "statusHistory": {
                 "cardinality": "1:N",
                 "on": {
@@ -1117,6 +2021,12 @@
                 "appointmentStartAt": {
                   "column": "appointmentStartAt"
                 },
+                "attributionReason": {
+                  "column": "attributionReason"
+                },
+                "bookedAt": {
+                  "column": "bookedAt"
+                },
                 "bookedValueMinorUnits": {
                   "column": "bookedValueMinorUnits"
                 },
@@ -1146,6 +2056,9 @@
                 },
                 "isNewCustomer": {
                   "column": "isNewCustomer"
+                },
+                "isTest": {
+                  "column": "isTest"
                 },
                 "locationId": {
                   "column": "locationId"
@@ -1374,6 +2287,13 @@
                   "kind": "scalar"
                 }
               },
+              "consumedBookingId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "consumedOrderId": {
                 "nullable": true,
                 "type": {
@@ -1469,6 +2389,9 @@
               "fields": {
                 "consumedAt": {
                   "column": "consumedAt"
+                },
+                "consumedBookingId": {
+                  "column": "consumedBookingId"
                 },
                 "consumedOrderId": {
                   "column": "consumedOrderId"
@@ -1747,6 +2670,13 @@
                   "kind": "scalar"
                 }
               },
+              "erasedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
               "externalIds": {
                 "nullable": true,
                 "type": {
@@ -1916,6 +2846,9 @@
                 "emailHash": {
                   "column": "emailHash"
                 },
+                "erasedAt": {
+                  "column": "erasedAt"
+                },
                 "externalIds": {
                   "column": "externalIds"
                 },
@@ -1946,6 +2879,558 @@
               },
               "namespaceId": "public",
               "table": "Customer"
+            }
+          },
+          "DailyAttributionRollup": {
+            "fields": {
+              "attributedMinorUnits": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int8@1",
+                  "kind": "scalar"
+                }
+              },
+              "builtAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "campaign": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "channel": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "creditedOrders": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/numeric@1",
+                  "kind": "scalar"
+                }
+              },
+              "currency": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 3
+                  }
+                }
+              },
+              "day": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 10
+                  }
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "isNewCustomer": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "locationId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "model": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "AttributionModelEnum",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "refundMinorUnits": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int8@1",
+                  "kind": "scalar"
+                }
+              },
+              "workspaceId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "workspace": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "workspaceId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Workspace",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "attributedMinorUnits": {
+                  "column": "attributedMinorUnits"
+                },
+                "builtAt": {
+                  "column": "builtAt"
+                },
+                "campaign": {
+                  "column": "campaign"
+                },
+                "channel": {
+                  "column": "channel"
+                },
+                "creditedOrders": {
+                  "column": "creditedOrders"
+                },
+                "currency": {
+                  "column": "currency"
+                },
+                "day": {
+                  "column": "day"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "isNewCustomer": {
+                  "column": "isNewCustomer"
+                },
+                "locationId": {
+                  "column": "locationId"
+                },
+                "model": {
+                  "column": "model"
+                },
+                "refundMinorUnits": {
+                  "column": "refundMinorUnits"
+                },
+                "workspaceId": {
+                  "column": "workspaceId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "DailyAttributionRollup"
+            }
+          },
+          "DailyRollup": {
+            "fields": {
+              "bookedValueMinorUnits": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int8@1",
+                  "kind": "scalar"
+                }
+              },
+              "bookingsCreated": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "builtAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "currency": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 3
+                  }
+                }
+              },
+              "day": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 10
+                  }
+                }
+              },
+              "discountMinorUnits": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int8@1",
+                  "kind": "scalar"
+                }
+              },
+              "grossMinorUnits": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int8@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "isNewCustomer": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "locationId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "matchedNetMinorUnits": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int8@1",
+                  "kind": "scalar"
+                }
+              },
+              "orders": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "refundMinorUnits": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int8@1",
+                  "kind": "scalar"
+                }
+              },
+              "taxMinorUnits": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int8@1",
+                  "kind": "scalar"
+                }
+              },
+              "workspaceId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "workspace": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "workspaceId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Workspace",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "bookedValueMinorUnits": {
+                  "column": "bookedValueMinorUnits"
+                },
+                "bookingsCreated": {
+                  "column": "bookingsCreated"
+                },
+                "builtAt": {
+                  "column": "builtAt"
+                },
+                "currency": {
+                  "column": "currency"
+                },
+                "day": {
+                  "column": "day"
+                },
+                "discountMinorUnits": {
+                  "column": "discountMinorUnits"
+                },
+                "grossMinorUnits": {
+                  "column": "grossMinorUnits"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "isNewCustomer": {
+                  "column": "isNewCustomer"
+                },
+                "locationId": {
+                  "column": "locationId"
+                },
+                "matchedNetMinorUnits": {
+                  "column": "matchedNetMinorUnits"
+                },
+                "orders": {
+                  "column": "orders"
+                },
+                "refundMinorUnits": {
+                  "column": "refundMinorUnits"
+                },
+                "taxMinorUnits": {
+                  "column": "taxMinorUnits"
+                },
+                "workspaceId": {
+                  "column": "workspaceId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "DailyRollup"
+            }
+          },
+          "FxRate": {
+            "fields": {
+              "base": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 3
+                  }
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "date": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 10
+                  }
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "quote": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 3
+                  }
+                }
+              },
+              "rate": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/numeric@1",
+                  "kind": "scalar"
+                }
+              },
+              "source": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "base": {
+                  "column": "base"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "date": {
+                  "column": "date"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "quote": {
+                  "column": "quote"
+                },
+                "rate": {
+                  "column": "rate"
+                },
+                "source": {
+                  "column": "source"
+                }
+              },
+              "namespaceId": "public",
+              "table": "FxRate"
+            }
+          },
+          "IdempotencyKey": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "key": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "requestHash": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "responseBody": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "route": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "statusCode": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "workspaceId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "workspace": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "workspaceId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Workspace",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "key": {
+                  "column": "key"
+                },
+                "requestHash": {
+                  "column": "requestHash"
+                },
+                "responseBody": {
+                  "column": "responseBody"
+                },
+                "route": {
+                  "column": "route"
+                },
+                "statusCode": {
+                  "column": "statusCode"
+                },
+                "workspaceId": {
+                  "column": "workspaceId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "IdempotencyKey"
             }
           },
           "Industry": {
@@ -2310,6 +3795,20 @@
           },
           "Order": {
             "fields": {
+              "attributionReason": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "bookingId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "checkoutToken": {
                 "nullable": true,
                 "type": {
@@ -2391,6 +3890,13 @@
                 }
               },
               "isNewCustomer": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "isTest": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/bool@1",
@@ -2506,6 +4012,22 @@
                   "namespace": "public"
                 }
               },
+              "booking": {
+                "cardinality": "N:1",
+                "nullable": true,
+                "on": {
+                  "localFields": [
+                    "bookingId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Booking",
+                  "namespace": "public"
+                }
+              },
               "connector": {
                 "cardinality": "N:1",
                 "nullable": true,
@@ -2603,6 +4125,12 @@
             },
             "storage": {
               "fields": {
+                "attributionReason": {
+                  "column": "attributionReason"
+                },
+                "bookingId": {
+                  "column": "bookingId"
+                },
                 "checkoutToken": {
                   "column": "checkoutToken"
                 },
@@ -2638,6 +4166,9 @@
                 },
                 "isNewCustomer": {
                   "column": "isNewCustomer"
+                },
+                "isTest": {
+                  "column": "isTest"
                 },
                 "locationId": {
                   "column": "locationId"
@@ -2831,6 +4362,13 @@
           },
           "RawEvent": {
             "fields": {
+              "attempts": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "connectorId": {
                 "nullable": true,
                 "type": {
@@ -2856,6 +4394,27 @@
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "idempotencyKey": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "isTest": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "nextAttemptAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
                   "kind": "scalar"
                 }
               },
@@ -2951,6 +4510,9 @@
             },
             "storage": {
               "fields": {
+                "attempts": {
+                  "column": "attempts"
+                },
                 "connectorId": {
                   "column": "connectorId"
                 },
@@ -2962,6 +4524,15 @@
                 },
                 "id": {
                   "column": "id"
+                },
+                "idempotencyKey": {
+                  "column": "idempotencyKey"
+                },
+                "isTest": {
+                  "column": "isTest"
+                },
+                "nextAttemptAt": {
+                  "column": "nextAttemptAt"
                 },
                 "payload": {
                   "column": "payload"
@@ -3134,6 +4705,77 @@
               },
               "namespaceId": "public",
               "table": "Refund"
+            }
+          },
+          "RollupDirtyDay": {
+            "fields": {
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "day": {
+                "nullable": false,
+                "type": {
+                  "codecId": "sql/varchar@1",
+                  "kind": "scalar",
+                  "typeParams": {
+                    "length": 10
+                  }
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "workspaceId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "workspace": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "workspaceId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Workspace",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "day": {
+                  "column": "day"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "workspaceId": {
+                  "column": "workspaceId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "RollupDirtyDay"
             }
           },
           "Session": {
@@ -3608,6 +5250,13 @@
                   "kind": "scalar"
                 }
               },
+              "isTest": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "landingPage": {
                 "nullable": true,
                 "type": {
@@ -3800,6 +5449,9 @@
                 "ip": {
                   "column": "ip"
                 },
+                "isTest": {
+                  "column": "isTest"
+                },
                 "landingPage": {
                   "column": "landingPage"
                 },
@@ -3902,6 +5554,13 @@
                   "kind": "scalar"
                 }
               },
+              "passwordChangedAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
               "passwordHash": {
                 "nullable": false,
                 "type": {
@@ -3939,6 +5598,13 @@
                 "nullable": false,
                 "type": {
                   "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "twoFactorSecretEnc": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/bytea@1",
                   "kind": "scalar"
                 }
               },
@@ -4046,6 +5712,9 @@
                 "name": {
                   "column": "name"
                 },
+                "passwordChangedAt": {
+                  "column": "passwordChangedAt"
+                },
                 "passwordHash": {
                   "column": "passwordHash"
                 },
@@ -4057,6 +5726,9 @@
                 },
                 "twoFactorEnabled": {
                   "column": "twoFactorEnabled"
+                },
+                "twoFactorSecretEnc": {
+                  "column": "twoFactorSecretEnc"
                 },
                 "updatedAt": {
                   "column": "updatedAt"
@@ -4275,6 +5947,170 @@
               },
               "namespaceId": "public",
               "table": "Visitor"
+            }
+          },
+          "WebhookDelivery": {
+            "fields": {
+              "attempts": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "deliveredAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "endpointId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "error": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "eventId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "eventType": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "nextAttemptAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "payload": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/json@1",
+                  "kind": "scalar"
+                }
+              },
+              "responseStatus": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "WebhookDeliveryStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "workspaceId": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "workspace": {
+                "cardinality": "N:1",
+                "nullable": false,
+                "on": {
+                  "localFields": [
+                    "workspaceId"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "Workspace",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "attempts": {
+                  "column": "attempts"
+                },
+                "createdAt": {
+                  "column": "createdAt"
+                },
+                "deliveredAt": {
+                  "column": "deliveredAt"
+                },
+                "endpointId": {
+                  "column": "endpointId"
+                },
+                "error": {
+                  "column": "error"
+                },
+                "eventId": {
+                  "column": "eventId"
+                },
+                "eventType": {
+                  "column": "eventType"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "nextAttemptAt": {
+                  "column": "nextAttemptAt"
+                },
+                "payload": {
+                  "column": "payload"
+                },
+                "responseStatus": {
+                  "column": "responseStatus"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "workspaceId": {
+                  "column": "workspaceId"
+                }
+              },
+              "namespaceId": "public",
+              "table": "WebhookDelivery"
             }
           },
           "WebhookEndpoint": {
@@ -4554,6 +6390,27 @@
                   }
                 }
               },
+              "rollupsBuiltAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "rollupsBuiltToken": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "rollupsDataToken": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "slug": {
                 "nullable": false,
                 "type": {
@@ -4578,6 +6435,13 @@
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "taxIncludedInRevenue": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
                   "kind": "scalar"
                 }
               },
@@ -4611,6 +6475,36 @@
               }
             },
             "relations": {
+              "adAccounts": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "workspaceId"
+                  ]
+                },
+                "to": {
+                  "model": "AdAccount",
+                  "namespace": "public"
+                }
+              },
+              "adSpend": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "workspaceId"
+                  ]
+                },
+                "to": {
+                  "model": "AdSpend",
+                  "namespace": "public"
+                }
+              },
               "apiKeys": {
                 "cardinality": "1:N",
                 "on": {
@@ -4638,6 +6532,36 @@
                 },
                 "to": {
                   "model": "AttributionCredit",
+                  "namespace": "public"
+                }
+              },
+              "attributionRollups": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "workspaceId"
+                  ]
+                },
+                "to": {
+                  "model": "DailyAttributionRollup",
+                  "namespace": "public"
+                }
+              },
+              "auditLogs": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "workspaceId"
+                  ]
+                },
+                "to": {
+                  "model": "AuditLog",
                   "namespace": "public"
                 }
               },
@@ -4716,6 +6640,36 @@
                   "namespace": "public"
                 }
               },
+              "dailyRollups": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "workspaceId"
+                  ]
+                },
+                "to": {
+                  "model": "DailyRollup",
+                  "namespace": "public"
+                }
+              },
+              "idempotencyKeys": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "workspaceId"
+                  ]
+                },
+                "to": {
+                  "model": "IdempotencyKey",
+                  "namespace": "public"
+                }
+              },
               "invites": {
                 "cardinality": "1:N",
                 "on": {
@@ -4791,6 +6745,21 @@
                   "namespace": "public"
                 }
               },
+              "rollupDirtyDays": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "workspaceId"
+                  ]
+                },
+                "to": {
+                  "model": "RollupDirtyDay",
+                  "namespace": "public"
+                }
+              },
               "sites": {
                 "cardinality": "1:N",
                 "on": {
@@ -4848,6 +6817,21 @@
                 },
                 "to": {
                   "model": "Visitor",
+                  "namespace": "public"
+                }
+              },
+              "webhookDeliveries": {
+                "cardinality": "1:N",
+                "on": {
+                  "localFields": [
+                    "id"
+                  ],
+                  "targetFields": [
+                    "workspaceId"
+                  ]
+                },
+                "to": {
+                  "model": "WebhookDelivery",
                   "namespace": "public"
                 }
               },
@@ -4923,6 +6907,15 @@
                 "reportingCurrency": {
                   "column": "reportingCurrency"
                 },
+                "rollupsBuiltAt": {
+                  "column": "rollupsBuiltAt"
+                },
+                "rollupsBuiltToken": {
+                  "column": "rollupsBuiltToken"
+                },
+                "rollupsDataToken": {
+                  "column": "rollupsDataToken"
+                },
                 "slug": {
                   "column": "slug"
                 },
@@ -4931,6 +6924,9 @@
                 },
                 "suspendedReason": {
                   "column": "suspendedReason"
+                },
+                "taxIncludedInRevenue": {
+                  "column": "taxIncludedInRevenue"
                 },
                 "timezone": {
                   "column": "timezone"
@@ -4958,6 +6954,363 @@
       "public": {
         "entries": {
           "table": {
+            "AdAccount": {
+              "checks": [
+                {
+                  "expression": "\"platform\" IN ('meta', 'google', 'other')",
+                  "name": "AdAccount_platform_check_3418e4e9",
+                  "prefix": "AdAccount_platform_check"
+                },
+                {
+                  "expression": "\"status\" IN ('pending', 'healthy', 'failing', 'disabled')",
+                  "name": "AdAccount_status_check_43ef7efc",
+                  "prefix": "AdAccount_status_check"
+                }
+              ],
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nullable": false
+                },
+                "credentialsEnc": {
+                  "codecId": "pg/bytea@1",
+                  "dataType": "pg/bytea",
+                  "nullable": true
+                },
+                "currency": {
+                  "codecId": "sql/varchar@1",
+                  "dataType": "pg/varchar",
+                  "nullable": true,
+                  "typeParams": {
+                    "length": 3
+                  }
+                },
+                "externalAccountId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "lastError": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "lastSyncedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
+                },
+                "name": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "platform": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "AdPlatform",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "default": {
+                    "kind": "literal",
+                    "value": "pending"
+                  },
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "ConnectorStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "timezone": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": false
+                },
+                "workspaceId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "workspaceId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "AdAccount"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "Workspace"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "workspaceId"
+                  ],
+                  "name": "AdAccount_workspaceId_idx_ba65f874",
+                  "prefix": "AdAccount_workspaceId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "workspaceId",
+                    "platform",
+                    "externalAccountId"
+                  ]
+                }
+              ]
+            },
+            "AdSpend": {
+              "checks": [
+                {
+                  "expression": "\"platform\" IN ('meta', 'google', 'other')",
+                  "name": "AdSpend_platform_check_3418e4e9",
+                  "prefix": "AdSpend_platform_check"
+                }
+              ],
+              "columns": {
+                "adAccountId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "adName": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "adSetName": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "campaignId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "campaignName": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "channel": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "clicks": {
+                  "codecId": "pg/int4@1",
+                  "dataType": "pg/int4",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nullable": false
+                },
+                "currency": {
+                  "codecId": "sql/varchar@1",
+                  "dataType": "pg/varchar",
+                  "nullable": false,
+                  "typeParams": {
+                    "length": 3
+                  }
+                },
+                "date": {
+                  "codecId": "sql/varchar@1",
+                  "dataType": "pg/varchar",
+                  "nullable": false,
+                  "typeParams": {
+                    "length": 10
+                  }
+                },
+                "dedupeKey": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "impressions": {
+                  "codecId": "pg/int4@1",
+                  "dataType": "pg/int4",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nullable": false
+                },
+                "locationId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "platform": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "AdPlatform",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "source": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "default": {
+                    "kind": "literal",
+                    "value": "api"
+                  },
+                  "nullable": false
+                },
+                "spendMinorUnits": {
+                  "codecId": "pg/int8@1",
+                  "dataType": "pg/int8",
+                  "nullable": false
+                },
+                "updatedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": false
+                },
+                "workspaceId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "workspaceId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "AdSpend"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "Workspace"
+                  }
+                },
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "adAccountId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "AdSpend"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "AdAccount"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "adAccountId"
+                  ],
+                  "name": "AdSpend_adAccountId_idx_5a257545",
+                  "prefix": "AdSpend_adAccountId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId",
+                    "date"
+                  ],
+                  "name": "AdSpend_workspaceId_date_idx_cd4316e8",
+                  "prefix": "AdSpend_workspaceId_date_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId"
+                  ],
+                  "name": "AdSpend_workspaceId_idx_ba65f874",
+                  "prefix": "AdSpend_workspaceId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "workspaceId",
+                    "dedupeKey"
+                  ]
+                }
+              ]
+            },
             "ApiKey": {
               "checks": [
                 {
@@ -5173,6 +7526,16 @@
                   "dataType": "pg/text",
                   "nullable": true
                 },
+                "campaign": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "channel": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
                 "createdAt": {
                   "codecId": "pg/timestamptz-string@1",
                   "dataType": "pg/timestamptz",
@@ -5207,6 +7570,11 @@
                   }
                 },
                 "orderId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "reasonCode": {
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
                   "nullable": true
@@ -5326,6 +7694,268 @@
                   "name": "AttributionCredit_workspaceId_idx_ba65f874",
                   "prefix": "AttributionCredit_workspaceId_idx",
                   "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId",
+                    "model"
+                  ],
+                  "name": "AttributionCredit_workspaceId_model_idx_69cfdf18",
+                  "prefix": "AttributionCredit_workspaceId_model_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "AuditLog": {
+              "checks": [
+                {
+                  "expression": "\"actorType\" IN ('user', 'platform_admin', 'api_key', 'system')",
+                  "name": "AuditLog_actorType_check_0d99bf46",
+                  "prefix": "AuditLog_actorType_check"
+                }
+              ],
+              "columns": {
+                "action": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "actorType": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "ActorType",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "actorUserId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "ip": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "metadata": {
+                  "codecId": "pg/json@1",
+                  "dataType": "pg/json",
+                  "nullable": true
+                },
+                "reason": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "targetId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "targetType": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "userAgent": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "workspaceId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "workspaceId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "AuditLog"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "Workspace"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "action"
+                  ],
+                  "name": "AuditLog_action_idx_cd0d2116",
+                  "prefix": "AuditLog_action_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId",
+                    "createdAt"
+                  ],
+                  "name": "AuditLog_workspaceId_createdAt_idx_5ff7e893",
+                  "prefix": "AuditLog_workspaceId_createdAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId"
+                  ],
+                  "name": "AuditLog_workspaceId_idx_ba65f874",
+                  "prefix": "AuditLog_workspaceId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "BackgroundJob": {
+              "checks": [
+                {
+                  "expression": "\"status\" IN ('queued', 'running', 'done', 'dead')",
+                  "name": "BackgroundJob_status_check_696d7edf",
+                  "prefix": "BackgroundJob_status_check"
+                }
+              ],
+              "columns": {
+                "attempts": {
+                  "codecId": "pg/int4@1",
+                  "dataType": "pg/int4",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nullable": false
+                },
+                "dedupeKey": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "finishedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "lastError": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "lockedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
+                },
+                "lockedBy": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "nextAttemptAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
+                },
+                "payload": {
+                  "codecId": "pg/json@1",
+                  "dataType": "pg/json",
+                  "nullable": true
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "default": {
+                    "kind": "literal",
+                    "value": "queued"
+                  },
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "BackgroundJobStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "type": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "workspaceId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "dedupeKey"
+                  ],
+                  "name": "BackgroundJob_dedupeKey_idx_99b3b4a9",
+                  "prefix": "BackgroundJob_dedupeKey_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "status",
+                    "nextAttemptAt"
+                  ],
+                  "name": "BackgroundJob_status_nextAttemptAt_idx_8ba20615",
+                  "prefix": "BackgroundJob_status_nextAttemptAt_idx",
+                  "unique": false
                 }
               ],
               "primaryKey": {
@@ -5338,8 +7968,8 @@
             "Booking": {
               "checks": [
                 {
-                  "expression": "\"matchMethod\" IN ('token', 'click_id', 'email', 'phone', 'none')",
-                  "name": "Booking_matchMethod_check_4a40748d",
+                  "expression": "\"matchMethod\" IN ('token', 'visitor_id', 'click_id', 'email', 'phone', 'none')",
+                  "name": "Booking_matchMethod_check_bad22685",
                   "prefix": "Booking_matchMethod_check"
                 },
                 {
@@ -5358,6 +7988,16 @@
                   "codecId": "pg/timestamptz-string@1",
                   "dataType": "pg/timestamptz",
                   "nullable": false
+                },
+                "attributionReason": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "bookedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
                 },
                 "bookedValueMinorUnits": {
                   "codecId": "pg/int8@1",
@@ -5416,6 +8056,15 @@
                   "nullable": true
                 },
                 "isNewCustomer": {
+                  "codecId": "pg/bool@1",
+                  "dataType": "pg/bool",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nullable": false
+                },
+                "isTest": {
                   "codecId": "pg/bool@1",
                   "dataType": "pg/bool",
                   "default": {
@@ -5778,6 +8427,11 @@
                   "dataType": "pg/timestamptz",
                   "nullable": true
                 },
+                "consumedBookingId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
                 "consumedOrderId": {
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
@@ -6069,6 +8723,11 @@
                   "dataType": "pg/text",
                   "nullable": true
                 },
+                "erasedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
+                },
                 "externalIds": {
                   "codecId": "pg/json@1",
                   "dataType": "pg/json",
@@ -6194,6 +8853,474 @@
                 ]
               },
               "uniques": []
+            },
+            "DailyAttributionRollup": {
+              "checks": [
+                {
+                  "expression": "\"model\" IN ('first_touch', 'last_touch', 'last_non_direct', 'linear', 'time_decay', 'position_based')",
+                  "name": "DailyAttributionRollup_model_check_82ba79db",
+                  "prefix": "DailyAttributionRollup_model_check"
+                }
+              ],
+              "columns": {
+                "attributedMinorUnits": {
+                  "codecId": "pg/int8@1",
+                  "dataType": "pg/int8",
+                  "nullable": false
+                },
+                "builtAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nullable": false
+                },
+                "campaign": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "channel": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "creditedOrders": {
+                  "codecId": "pg/numeric@1",
+                  "dataType": "pg/numeric",
+                  "nullable": false
+                },
+                "currency": {
+                  "codecId": "sql/varchar@1",
+                  "dataType": "pg/varchar",
+                  "nullable": false,
+                  "typeParams": {
+                    "length": 3
+                  }
+                },
+                "day": {
+                  "codecId": "sql/varchar@1",
+                  "dataType": "pg/varchar",
+                  "nullable": false,
+                  "typeParams": {
+                    "length": 10
+                  }
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "isNewCustomer": {
+                  "codecId": "pg/bool@1",
+                  "dataType": "pg/bool",
+                  "nullable": false
+                },
+                "locationId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "model": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "AttributionModelEnum",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "refundMinorUnits": {
+                  "codecId": "pg/int8@1",
+                  "dataType": "pg/int8",
+                  "default": {
+                    "kind": "literal",
+                    "value": "0"
+                  },
+                  "nullable": false
+                },
+                "workspaceId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "workspaceId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "DailyAttributionRollup"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "Workspace"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "workspaceId"
+                  ],
+                  "name": "DailyAttributionRollup_workspaceId_idx_ba65f874",
+                  "prefix": "DailyAttributionRollup_workspaceId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId",
+                    "model",
+                    "day"
+                  ],
+                  "name": "DailyAttributionRollup_workspaceId_model_day_idx_de0ea5b6",
+                  "prefix": "DailyAttributionRollup_workspaceId_model_day_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "DailyRollup": {
+              "columns": {
+                "bookedValueMinorUnits": {
+                  "codecId": "pg/int8@1",
+                  "dataType": "pg/int8",
+                  "default": {
+                    "kind": "literal",
+                    "value": "0"
+                  },
+                  "nullable": false
+                },
+                "bookingsCreated": {
+                  "codecId": "pg/int4@1",
+                  "dataType": "pg/int4",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nullable": false
+                },
+                "builtAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nullable": false
+                },
+                "currency": {
+                  "codecId": "sql/varchar@1",
+                  "dataType": "pg/varchar",
+                  "nullable": false,
+                  "typeParams": {
+                    "length": 3
+                  }
+                },
+                "day": {
+                  "codecId": "sql/varchar@1",
+                  "dataType": "pg/varchar",
+                  "nullable": false,
+                  "typeParams": {
+                    "length": 10
+                  }
+                },
+                "discountMinorUnits": {
+                  "codecId": "pg/int8@1",
+                  "dataType": "pg/int8",
+                  "default": {
+                    "kind": "literal",
+                    "value": "0"
+                  },
+                  "nullable": false
+                },
+                "grossMinorUnits": {
+                  "codecId": "pg/int8@1",
+                  "dataType": "pg/int8",
+                  "default": {
+                    "kind": "literal",
+                    "value": "0"
+                  },
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "isNewCustomer": {
+                  "codecId": "pg/bool@1",
+                  "dataType": "pg/bool",
+                  "nullable": false
+                },
+                "locationId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "matchedNetMinorUnits": {
+                  "codecId": "pg/int8@1",
+                  "dataType": "pg/int8",
+                  "default": {
+                    "kind": "literal",
+                    "value": "0"
+                  },
+                  "nullable": false
+                },
+                "orders": {
+                  "codecId": "pg/int4@1",
+                  "dataType": "pg/int4",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nullable": false
+                },
+                "refundMinorUnits": {
+                  "codecId": "pg/int8@1",
+                  "dataType": "pg/int8",
+                  "default": {
+                    "kind": "literal",
+                    "value": "0"
+                  },
+                  "nullable": false
+                },
+                "taxMinorUnits": {
+                  "codecId": "pg/int8@1",
+                  "dataType": "pg/int8",
+                  "default": {
+                    "kind": "literal",
+                    "value": "0"
+                  },
+                  "nullable": false
+                },
+                "workspaceId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "workspaceId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "DailyRollup"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "Workspace"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "workspaceId",
+                    "day"
+                  ],
+                  "name": "DailyRollup_workspaceId_day_idx_64c6ce54",
+                  "prefix": "DailyRollup_workspaceId_day_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId"
+                  ],
+                  "name": "DailyRollup_workspaceId_idx_ba65f874",
+                  "prefix": "DailyRollup_workspaceId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "FxRate": {
+              "columns": {
+                "base": {
+                  "codecId": "sql/varchar@1",
+                  "dataType": "pg/varchar",
+                  "nullable": false,
+                  "typeParams": {
+                    "length": 3
+                  }
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nullable": false
+                },
+                "date": {
+                  "codecId": "sql/varchar@1",
+                  "dataType": "pg/varchar",
+                  "nullable": false,
+                  "typeParams": {
+                    "length": 10
+                  }
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "quote": {
+                  "codecId": "sql/varchar@1",
+                  "dataType": "pg/varchar",
+                  "nullable": false,
+                  "typeParams": {
+                    "length": 3
+                  }
+                },
+                "rate": {
+                  "codecId": "pg/numeric@1",
+                  "dataType": "pg/numeric",
+                  "nullable": false
+                },
+                "source": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "default": {
+                    "kind": "literal",
+                    "value": "manual"
+                  },
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "date",
+                    "base",
+                    "quote"
+                  ]
+                }
+              ]
+            },
+            "IdempotencyKey": {
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "key": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "requestHash": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "responseBody": {
+                  "codecId": "pg/json@1",
+                  "dataType": "pg/json",
+                  "nullable": false
+                },
+                "route": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "statusCode": {
+                  "codecId": "pg/int4@1",
+                  "dataType": "pg/int4",
+                  "nullable": false
+                },
+                "workspaceId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "workspaceId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "IdempotencyKey"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "Workspace"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "workspaceId"
+                  ],
+                  "name": "IdempotencyKey_workspaceId_idx_ba65f874",
+                  "prefix": "IdempotencyKey_workspaceId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "workspaceId",
+                    "key"
+                  ]
+                }
+              ]
             },
             "Industry": {
               "columns": {
@@ -6472,8 +9599,8 @@
             "Order": {
               "checks": [
                 {
-                  "expression": "\"matchMethod\" IN ('token', 'click_id', 'email', 'phone', 'none')",
-                  "name": "Order_matchMethod_check_4a40748d",
+                  "expression": "\"matchMethod\" IN ('token', 'visitor_id', 'click_id', 'email', 'phone', 'none')",
+                  "name": "Order_matchMethod_check_bad22685",
                   "prefix": "Order_matchMethod_check"
                 },
                 {
@@ -6483,6 +9610,16 @@
                 }
               ],
               "columns": {
+                "attributionReason": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "bookingId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
                 "checkoutToken": {
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
@@ -6550,6 +9687,15 @@
                   "nullable": true
                 },
                 "isNewCustomer": {
+                  "codecId": "pg/bool@1",
+                  "dataType": "pg/bool",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nullable": false
+                },
+                "isTest": {
                   "codecId": "pg/bool@1",
                   "dataType": "pg/bool",
                   "default": {
@@ -6710,9 +9856,33 @@
                     "namespaceId": "public",
                     "tableName": "Connector"
                   }
+                },
+                {
+                  "source": {
+                    "columns": [
+                      "bookingId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "Order"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "Booking"
+                  }
                 }
               ],
               "indexes": [
+                {
+                  "columns": [
+                    "bookingId"
+                  ],
+                  "name": "Order_bookingId_idx_17848f4a",
+                  "prefix": "Order_bookingId_idx",
+                  "unique": false
+                },
                 {
                   "columns": [
                     "connectorId"
@@ -6894,6 +10064,15 @@
                 }
               ],
               "columns": {
+                "attempts": {
+                  "codecId": "pg/int4@1",
+                  "dataType": "pg/int4",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nullable": false
+                },
                 "connectorId": {
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
@@ -6913,6 +10092,25 @@
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
                   "nullable": false
+                },
+                "idempotencyKey": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "isTest": {
+                  "codecId": "pg/bool@1",
+                  "dataType": "pg/bool",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nullable": false
+                },
+                "nextAttemptAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
                 },
                 "payload": {
                   "codecId": "pg/json@1",
@@ -7025,6 +10223,15 @@
                   ],
                   "name": "RawEvent_workspaceId_idx_ba65f874",
                   "prefix": "RawEvent_workspaceId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId",
+                    "receivedAt"
+                  ],
+                  "name": "RawEvent_workspaceId_receivedAt_idx_06cd50e7",
+                  "prefix": "RawEvent_workspaceId_receivedAt_idx",
                   "unique": false
                 }
               ],
@@ -7145,6 +10352,81 @@
                   ],
                   "name": "Refund_workspaceId_idx_ba65f874",
                   "prefix": "Refund_workspaceId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "RollupDirtyDay": {
+              "columns": {
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nullable": false
+                },
+                "day": {
+                  "codecId": "sql/varchar@1",
+                  "dataType": "pg/varchar",
+                  "nullable": false,
+                  "typeParams": {
+                    "length": 10
+                  }
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "workspaceId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "workspaceId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "RollupDirtyDay"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "Workspace"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "workspaceId",
+                    "day"
+                  ],
+                  "name": "RollupDirtyDay_workspaceId_day_idx_64c6ce54",
+                  "prefix": "RollupDirtyDay_workspaceId_day_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId"
+                  ],
+                  "name": "RollupDirtyDay_workspaceId_idx_ba65f874",
+                  "prefix": "RollupDirtyDay_workspaceId_idx",
                   "unique": false
                 }
               ],
@@ -7511,6 +10793,15 @@
                   "dataType": "pg/text",
                   "nullable": true
                 },
+                "isTest": {
+                  "codecId": "pg/bool@1",
+                  "dataType": "pg/bool",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nullable": false
+                },
                 "landingPage": {
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
@@ -7660,6 +10951,24 @@
                 },
                 {
                   "columns": [
+                    "workspaceId",
+                    "fbclid"
+                  ],
+                  "name": "Touch_workspaceId_fbclid_idx_9ff773b0",
+                  "prefix": "Touch_workspaceId_fbclid_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId",
+                    "gclid"
+                  ],
+                  "name": "Touch_workspaceId_gclid_idx_8b2e3853",
+                  "prefix": "Touch_workspaceId_gclid_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
                     "workspaceId"
                   ],
                   "name": "Touch_workspaceId_idx_ba65f874",
@@ -7736,6 +11045,11 @@
                   "dataType": "pg/text",
                   "nullable": false
                 },
+                "passwordChangedAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
+                },
                 "passwordHash": {
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
@@ -7775,6 +11089,11 @@
                     "value": false
                   },
                   "nullable": false
+                },
+                "twoFactorSecretEnc": {
+                  "codecId": "pg/bytea@1",
+                  "dataType": "pg/bytea",
+                  "nullable": true
                 },
                 "updatedAt": {
                   "codecId": "pg/timestamptz-string@1",
@@ -8025,6 +11344,160 @@
                 }
               ]
             },
+            "WebhookDelivery": {
+              "checks": [
+                {
+                  "expression": "\"status\" IN ('pending', 'succeeded', 'failed')",
+                  "name": "WebhookDelivery_status_check_ff8e7f67",
+                  "prefix": "WebhookDelivery_status_check"
+                }
+              ],
+              "columns": {
+                "attempts": {
+                  "codecId": "pg/int4@1",
+                  "dataType": "pg/int4",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nullable": false
+                },
+                "deliveredAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
+                },
+                "endpointId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "error": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "eventId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "eventType": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                },
+                "nextAttemptAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
+                },
+                "payload": {
+                  "codecId": "pg/json@1",
+                  "dataType": "pg/json",
+                  "nullable": false
+                },
+                "responseStatus": {
+                  "codecId": "pg/int4@1",
+                  "dataType": "pg/int4",
+                  "nullable": true
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "default": {
+                    "kind": "literal",
+                    "value": "pending"
+                  },
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "WebhookDeliveryStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "workspaceId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "onDelete": "cascade",
+                  "source": {
+                    "columns": [
+                      "workspaceId"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "WebhookDelivery"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "Workspace"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "endpointId"
+                  ],
+                  "name": "WebhookDelivery_endpointId_idx_48273c15",
+                  "prefix": "WebhookDelivery_endpointId_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "status"
+                  ],
+                  "name": "WebhookDelivery_status_idx_e98638ab",
+                  "prefix": "WebhookDelivery_status_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId",
+                    "createdAt"
+                  ],
+                  "name": "WebhookDelivery_workspaceId_createdAt_idx_5ff7e893",
+                  "prefix": "WebhookDelivery_workspaceId_createdAt_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "workspaceId"
+                  ],
+                  "name": "WebhookDelivery_workspaceId_idx_ba65f874",
+                  "prefix": "WebhookDelivery_workspaceId_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "WebhookEndpoint": {
               "checks": [
                 {
@@ -8149,8 +11622,8 @@
                   "prefix": "Workspace_defaultModel_check"
                 },
                 {
-                  "expression": "\"status\" IN ('active', 'suspended', 'closed')",
-                  "name": "Workspace_status_check_79918751",
+                  "expression": "\"status\" IN ('pending', 'active', 'suspended', 'closed')",
+                  "name": "Workspace_status_check_4dc0f300",
                   "prefix": "Workspace_status_check"
                 }
               ],
@@ -8287,6 +11760,21 @@
                     "length": 3
                   }
                 },
+                "rollupsBuiltAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
+                },
+                "rollupsBuiltToken": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "rollupsDataToken": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
                 "slug": {
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
@@ -8311,6 +11799,15 @@
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
                   "nullable": true
+                },
+                "taxIncludedInRevenue": {
+                  "codecId": "pg/bool@1",
+                  "dataType": "pg/bool",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nullable": false
                 },
                 "timezone": {
                   "codecId": "pg/text@1",
@@ -8367,6 +11864,14 @@
                 "system"
               ]
             },
+            "AdPlatform": {
+              "kind": "valueSet",
+              "values": [
+                "meta",
+                "google",
+                "other"
+              ]
+            },
             "ApiKeyMode": {
               "kind": "valueSet",
               "values": [
@@ -8390,6 +11895,15 @@
                 "linear",
                 "time_decay",
                 "position_based"
+              ]
+            },
+            "BackgroundJobStatus": {
+              "kind": "valueSet",
+              "values": [
+                "queued",
+                "running",
+                "done",
+                "dead"
               ]
             },
             "BookingStatus": {
@@ -8448,6 +11962,7 @@
               "kind": "valueSet",
               "values": [
                 "token",
+                "visitor_id",
                 "click_id",
                 "email",
                 "phone",
@@ -8496,9 +12011,18 @@
                 "meta_tag"
               ]
             },
+            "WebhookDeliveryStatus": {
+              "kind": "valueSet",
+              "values": [
+                "pending",
+                "succeeded",
+                "failed"
+              ]
+            },
             "WorkspaceStatus": {
               "kind": "valueSet",
               "values": [
+                "pending",
                 "active",
                 "suspended",
                 "closed"
@@ -8510,12 +12034,64 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "ba97c334c1e62c3d575dd83340c422bf60a502d2407ec27c5c59ee80ef2fbfff"
+    "storageHash": "00a26e30edbfae1438bf77de5f7864cafb6363dfd318055fdba3542d3d7b847a"
   },
   "execution": {
-    "executionHash": "37f05d33c7cd09084bc6cdab48f6409e82088acdf46599b702de5d501000e35d",
+    "executionHash": "935b8e3839cec610114891de01c9f3d8c400a994fe186554cb101181ffb510da",
     "mutations": {
       "defaults": [
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "entry": "AdAccount",
+            "field": "id",
+            "namespace": "public"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "entry": "AdAccount",
+            "field": "updatedAt",
+            "namespace": "public"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "entry": "AdSpend",
+            "field": "id",
+            "namespace": "public"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "onUpdate": {
+            "id": "timestampNow",
+            "kind": "generator"
+          },
+          "ref": {
+            "entry": "AdSpend",
+            "field": "updatedAt",
+            "namespace": "public"
+          }
+        },
         {
           "onCreate": {
             "id": "uuidv4",
@@ -8534,6 +12110,28 @@
           },
           "ref": {
             "entry": "AttributionCredit",
+            "field": "id",
+            "namespace": "public"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "entry": "AuditLog",
+            "field": "id",
+            "namespace": "public"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "entry": "BackgroundJob",
             "field": "id",
             "namespace": "public"
           }
@@ -8681,6 +12279,50 @@
             "kind": "generator"
           },
           "ref": {
+            "entry": "DailyAttributionRollup",
+            "field": "id",
+            "namespace": "public"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "entry": "DailyRollup",
+            "field": "id",
+            "namespace": "public"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "entry": "FxRate",
+            "field": "id",
+            "namespace": "public"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "entry": "IdempotencyKey",
+            "field": "id",
+            "namespace": "public"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
             "entry": "Industry",
             "field": "id",
             "namespace": "public"
@@ -8799,6 +12441,17 @@
             "kind": "generator"
           },
           "ref": {
+            "entry": "RollupDirtyDay",
+            "field": "id",
+            "namespace": "public"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
             "entry": "Session",
             "field": "id",
             "namespace": "public"
@@ -8885,6 +12538,17 @@
           },
           "ref": {
             "entry": "Visitor",
+            "field": "id",
+            "namespace": "public"
+          }
+        },
+        {
+          "onCreate": {
+            "id": "uuidv4",
+            "kind": "generator"
+          },
+          "ref": {
+            "entry": "WebhookDelivery",
             "field": "id",
             "namespace": "public"
           }
