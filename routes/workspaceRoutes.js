@@ -27,7 +27,7 @@ import {
     createWebhookEndpoint,
     updateWebhookEndpoint,
     deleteWebhookEndpoint,
-    getAuditLog,
+    getAuditLog, listInvites, updateInvite, resendInvite, revokeInvite
 } from "../controllers/workspaceController.js";
 import * as reports from "../controllers/reportsController.js";
 import { listCustomers, getCustomerJourney, mergeCustomersHandler } from "../controllers/customerController.js";
@@ -50,6 +50,10 @@ router.patch("/settings", requireRole("company_admin"), updateWorkspaceSettings)
 
 // ── Team / Invites ─────────────────────────────────────────────────────────
 router.post("/invites", requireRole("company_admin"), inviteUser);
+router.get("/invites", requireRole("company_admin"), listInvites);
+router.patch("/invites/:id", requireRole("company_admin"), updateInvite);
+router.post("/invites/:id/resend", requireRole("company_admin"), resendInvite);
+router.delete("/invites/:id", requireRole("company_admin"), revokeInvite);
 router.get("/team", requireRole("company_admin", "company_viewer"), listTeam);
 router.patch("/team/:userId", requireRole("company_admin"), updateTeamMember);
 

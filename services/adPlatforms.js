@@ -55,10 +55,10 @@ async function call(url, options = {}) {
 }
 
 /** Signed, short-lived OAuth state: carries the company and user through the redirect. */
-export function authorizationUrl(platform, { workspaceId, userId }) {
+export function authorizationUrl(platform, { workspaceId, userId, returnTo = null }) {
     if (!platformConfigured(platform)) throw new AdPlatformError(`${platform} is not configured on this server`, 501);
     if (!ENV.APP_API_URL) throw new AdPlatformError("APP_API_URL must be set for OAuth redirects", 501);
-    const state = jwt.sign({ workspaceId, userId, platform, purpose: "ad_oauth" }, ENV.JWT_SECRET, { expiresIn: STATE_TTL });
+    const state = jwt.sign({ workspaceId, userId, platform, purpose: "ad_oauth", ...(returnTo ? { returnTo } : {}) }, ENV.JWT_SECRET, { expiresIn: STATE_TTL });
     if (platform === "meta") {
         const q = new URLSearchParams({ client_id: ENV.META_APP_ID, redirect_uri: callbackUrl("meta"), state, scope: "ads_read", response_type: "code" });
         return `https://www.facebook.com/${META_VERSION}/dialog/oauth?${q}`;

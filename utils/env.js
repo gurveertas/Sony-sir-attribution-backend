@@ -57,7 +57,8 @@ export default ENV;
 //                       enable the ad-spend OAuth connections.
 //   DISABLE_BACKGROUND_WORKERS=true  do not start the event queue / scheduler in this process.
 ENV.IDENTITY_HASH_KEY = process.env.IDENTITY_HASH_KEY || null;
-ENV.FRONTEND_URL = (process.env.FRONTEND_URL || "https://asftas.vercel.app").replace(/\/+$/, "");
+// asftas.vercel.app (no dash) has no deployment (Vercel answers 404 DEPLOYMENT_NOT_FOUND): never use it.
+ENV.FRONTEND_URL = (process.env.FRONTEND_URL || "https://asf-tas.vercel.app").replace(/\/+$/, "");
 ENV.REQUIRE_WORKSPACE_APPROVAL = String(process.env.REQUIRE_WORKSPACE_APPROVAL ?? "false").toLowerCase() === "true";
 ENV.META_APP_ID = process.env.META_APP_ID || null;
 ENV.META_APP_SECRET = process.env.META_APP_SECRET || null;
@@ -65,6 +66,10 @@ ENV.GOOGLE_ADS_CLIENT_ID = process.env.GOOGLE_ADS_CLIENT_ID || null;
 ENV.GOOGLE_ADS_CLIENT_SECRET = process.env.GOOGLE_ADS_CLIENT_SECRET || null;
 ENV.GOOGLE_ADS_DEVELOPER_TOKEN = process.env.GOOGLE_ADS_DEVELOPER_TOKEN || null;
 ENV.DISABLE_BACKGROUND_WORKERS = String(process.env.DISABLE_BACKGROUND_WORKERS ?? "false").toLowerCase() === "true";
+
+if (!process.env.FRONTEND_URL) {
+    console.warn(`[config] FRONTEND_URL is not set: links in emails (invites, verification, password reset) fall back to ${ENV.FRONTEND_URL} when the request does not say which dashboard it came from. Set FRONTEND_URL to your dashboard's address.`);
+}
 
 if (ENV.NODE_ENV === "production" && !ENV.IDENTITY_HASH_KEY) {
     console.warn("[config] IDENTITY_HASH_KEY is not set: emails/phones are hashed with plain SHA-256, which is easy to brute-force for phone numbers. Set a dedicated secret.");

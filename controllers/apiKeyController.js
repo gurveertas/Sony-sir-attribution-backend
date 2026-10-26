@@ -71,8 +71,26 @@ function requireCompanyAdmin(req, res) {
 }
 
 // What we send back to the client. keyHash is deliberately left out.
-function toPublic(row) {
+/**
+ * Display status only (rotation itself is unchanged):
+ *   active    the key works
+ *   replaced  a newer key was made by rotating it; it keeps working until expiresAt (grace period)
+ *   expired   past expiresAt: it no longer works
+ *   revoked   revoked by a user
+ */
+function keyStatus(row, replacement) {
+  if (row.revokedAt) return "revoked";
+  if (row.expiresAt && new Date(row.expiresAt).getTime() <= Date.now()) return "expired";
+  if (replacement) return "replaced";
+  return "active";
+}
+
+function toPublic(row, all = []) {
+  const replacement = all.find((k) => k.rotatedFromId === row.id) ?? null;
   return {
+    status: keyStatus(row, replacement),
+    replacedById: replacement?.id ?? null,
+    replacedByPrefix: replacement?.keyPrefix ?? null,
     id: row.id,
     name: row.name,
     type: row.type,
@@ -194,13 +212,14 @@ export const listApiKeys = async (req, res) => {
     const workspaceId = requireCompanyAdmin(req, res);
     if (!workspaceId) return;
 
-    let rows = await fetchWorkspaceKeys(db, workspaceId);
+    const all = await fetchWorkspaceKeys(db, workspaceId);
+    let rows = all;
     if (req.query.includeRevoked !== "true") rows = rows.filter((row) => !row.revokedAt);
 
     // Newest first. createdAt is an ISO string, so string comparison sorts correctly.
     rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 
-    return res.status(200).json({ data: rows.map(toPublic) });
+    return res.status(200).json({ data: rows.map((row) => toPublic(row, all)) });
   } catch (error) {
     console.error("listApiKeys error:", error.message);
     return res.status(500).json({ message: "Internal server error while listing API keys" });
@@ -391,7 +410,7 @@ export const adminListApiKeys = async (req, res) => {
     // });
 
     const rows = await db.orm.public.ApiKey.where({ workspaceId }).all();
-    return res.status(200).json({ data: rows.map(toPublic) }); // prefix only, never the full key
+    return res.status(200).json({ data: rows.map((row) => toPublic(row, rows)) }); // prefix only, never the full key
   } catch (error) {
     console.error("adminListApiKeys error:", error.message);
     return res.status(500).json({ message: "Internal server error while listing API keys" });

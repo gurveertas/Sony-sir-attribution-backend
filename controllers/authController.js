@@ -29,6 +29,7 @@ import { isValidTimeZone } from "../utils/timezone.js";
 import { encryptSecret, decryptSecret } from "../utils/crypto.js";
 import { generateSecret, verifyTotp, otpauthUrl } from "../utils/totp.js";
 import { platformAdmin2faRequired } from "../middlewares/protectRoute.js";
+import { frontendBase } from "../utils/frontendUrl.js";
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_FAILED_LOGINS = 5;
@@ -58,8 +59,8 @@ function throttled(key) {
     return e.count > 20;
 }
 
-function verificationEmail(name, token) {
-    const url = `${ENV.FRONTEND_URL}/verify-user?verifytoken=${token}`;
+function verificationEmail(name, token, base = ENV.FRONTEND_URL) {
+    const url = `${base}/verify-user?verifytoken=${token}`;
     try {
         return fs
             .readFileSync(path.join(process.cwd(), "templates", "signupVerification.html"), "utf-8")
@@ -150,7 +151,7 @@ export const registerCompany = async (req, res) => {
         });
 
         try {
-            await sendEmail({ to: normalizedEmail, subject: "Confirm your email address", html: verificationEmail(adminName || name, verificationToken) });
+            await sendEmail({ to: normalizedEmail, subject: "Confirm your email address", html: verificationEmail(adminName || name, verificationToken, frontendBase(req)) });
         } catch (emailErr) {
             console.error("Failed to send verification email:", emailErr.message);
         }
@@ -211,7 +212,7 @@ export const resendVerification = async (req, res) => {
         if (!workspace?.emailVerificationHash) return res.status(200).json(generic);
         const token = crypto.randomBytes(32).toString("hex");
         await db.orm.public.Workspace.where({ id: workspace.id }).update({ emailVerificationHash: sha256(token), emailVerificationExpires: new Date(Date.now() + VERIFICATION_TTL_MS).toISOString() });
-        await sendEmail({ to: email, subject: "Confirm your email address", html: verificationEmail(user.name, token) }).catch((e) => console.error("resend verification email failed:", e.message));
+        await sendEmail({ to: email, subject: "Confirm your email address", html: verificationEmail(user.name, token, frontendBase(req)) }).catch((e) => console.error("resend verification email failed:", e.message));
         return res.status(200).json(generic);
     } catch (error) {
         console.error("resendVerification error:", error.message);
@@ -398,7 +399,7 @@ export const forgotPass = async (req, res) => {
 
         // tied to the current password hash, so it stops working once used
         const resetToken = jwt.sign({ userId: user.id, type: "password_reset" }, ENV.JWT_SECRET + user.passwordHash, { expiresIn: "1h" });
-        const resetUrl = `${ENV.FRONTEND_URL}/reset-password?token=${resetToken}`;
+        const resetUrl = `${frontendBase(req)}/reset-password?token=${resetToken}`;
         let html;
         try {
             html = fs.readFileSync(path.join(process.cwd(), "templates", "passwordReset.html"), "utf-8").replace(/\{\{name\}\}/g, escapeHtml(user.name || "there")).replace(/\{\{resetUrl\}\}/g, resetUrl);

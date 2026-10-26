@@ -487,6 +487,11 @@ Revokes old active key and creates a replacement with the same settings atomical
     }
     ```
   * **Response `201 Created`:** `{"message": "Invite sent", "email": "teammate@example.com"}`
+* **List Invites:** `GET /api/workspace/invites?status=open|pending|expired|accepted|revoked|all` (Role: `company_admin`; default `open` = pending + expired). Each row: `id, email, role, allowedLocationIds, status, invitedByName, expiresAt, createdAt`.
+* **Edit Invite:** `PATCH /api/workspace/invites/:id` `{ role?, allowedLocationIds? }` (pending or expired invites only).
+* **Resend Invite:** `POST /api/workspace/invites/:id/resend`: a new link valid 7 days. The previous link stops working. Answers `502 email_failed` if the email could not be sent.
+* **Delete Invite:** `DELETE /api/workspace/invites/:id`: revokes the link (the row is kept for the audit log). `409` once the invite was accepted.
+* Email links (invite, verification, password reset) point to the dashboard origin the request came from when it is an allowed origin, otherwise to `FRONTEND_URL`.
 * **Accept Invite:** `POST /api/workspace/invites/accept` (Public)
   * **Body:**
     ```json

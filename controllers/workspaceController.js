@@ -23,6 +23,7 @@ import { WEBHOOK_EVENT_TYPES } from "../services/webhookDispatcher.js";
 import { sendCsv, wantsCsv, paginate, sortDesc } from "../services/http.js";
 import ENV from "../utils/env.js";
 import { requestRebuild } from "../services/rollups.js";
+import { frontendBase } from "../utils/frontendUrl.js";
 
 const orm = () => db.orm.public;
 
@@ -153,15 +154,15 @@ export const inviteUser = async (req, res) => {
             return res.status(409).json({ message: existingUser.workspaceId === workspaceId ? "This user is already a member of your workspace" : "This email already has an account" });
         }
 
-        // Check for existing open invite
-        const existing = await orm().Invite.where({ workspaceId, email: normalizedEmail }).first();
-        if (existing && !existing.acceptedAt && !existing.revokedAt && new Date(existing.expiresAt) > new Date()) {
-            return res.status(409).json({ message: "A pending invite already exists for this email" });
+        // Check for an open invite (any of them: older ones may be revoked or expired)
+        const open = (await orm().Invite.where({ workspaceId, email: normalizedEmail }).all()).find((i) => inviteStatus(i) === "pending");
+        if (open) {
+            return res.status(409).json({ message: "A pending invite already exists for this email. Resend it from the Team page.", code: "invite_exists", inviteId: open.id });
         }
 
         const rawToken = crypto.randomBytes(32).toString("hex");
         const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        const expiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
 
         await db.transaction(async (tx) => {
             await tx.orm.public.Invite.create({
@@ -187,23 +188,166 @@ export const inviteUser = async (req, res) => {
             });
         });
 
-        // Send invite email (non-blocking)
-        try {
-            await sendEmail({
-                to: normalizedEmail,
-                subject: "You've been invited to join a workspace",
-                html: `<p>You have been invited to join the analytics dashboard as <strong>${role === "company_admin" ? "an admin" : "a viewer"}</strong>.</p>
-                       <p>Accept your invite: <a href="${ENV.FRONTEND_URL}/accept-invite?token=${rawToken}">Click here</a></p>
-                       <p>This link expires in 7 days.</p>`,
-            });
-        } catch (emailErr) {
-            console.error("Failed to send invite email:", emailErr.message);
-        }
+        // Send invite email (a failure does not undo the invite: it can be resent)
+        const emailed = await sendInviteEmail(req, normalizedEmail, role, rawToken);
 
-        return res.status(201).json({ message: "Invite sent", email: normalizedEmail });
+        return res.status(201).json({ message: emailed ? "Invite sent" : "Invite created, but the email could not be sent. Use Resend.", email: normalizedEmail, emailed });
     } catch (error) {
         console.error("inviteUser:", error.message);
         return res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** pending | expired | accepted | revoked */
+export function inviteStatus(invite, now = new Date()) {
+    if (invite.acceptedAt) return "accepted";
+    if (invite.revokedAt) return "revoked";
+    return new Date(invite.expiresAt) > now ? "pending" : "expired";
+}
+
+async function sendInviteEmail(req, email, role, rawToken) {
+    try {
+        await sendEmail({
+            to: email,
+            subject: "You've been invited to join a workspace",
+            html: `<p>You have been invited to join the analytics dashboard as <strong>${role === "company_admin" ? "an admin" : "a viewer"}</strong>.</p>
+                   <p>Accept your invite: <a href="${frontendBase(req)}/accept-invite?token=${rawToken}">Click here</a></p>
+                   <p>This link expires in 7 days.</p>`,
+        });
+        return true;
+    } catch (emailErr) {
+        console.error("Failed to send invite email:", emailErr.message);
+        return false;
+    }
+}
+
+const publicInvite = (i, inviters = new Map()) => ({
+    id: i.id,
+    email: i.email,
+    role: i.role,
+    allowedLocationIds: i.allowedLocationIds ?? [],
+    status: inviteStatus(i),
+    invitedBy: i.invitedBy,
+    invitedByName: inviters.get(i.invitedBy) ?? null,
+    expiresAt: i.expiresAt,
+    acceptedAt: i.acceptedAt ?? null,
+    revokedAt: i.revokedAt ?? null,
+    createdAt: i.createdAt,
+});
+
+async function loadOwnInvite(req, res) {
+    const invite = await orm().Invite.where({ id: req.params.id, workspaceId: req.user.workspaceId }).first();
+    if (!invite) {
+        res.status(404).json({ message: "Invite not found", code: "not_found" });
+        return null;
+    }
+    return invite;
+}
+
+const inviteAudit = (req, action, invite, metadata = {}) =>
+    writeAudit(orm(), {
+        workspaceId: req.user.workspaceId,
+        actorType: "user",
+        actorUserId: req.user.id,
+        action,
+        targetType: "invite",
+        targetId: invite.id,
+        metadata: { email: invite.email, ...metadata },
+        ip: req.ip ?? null,
+        userAgent: req.headers["user-agent"] ?? null,
+    });
+
+/**
+ * GET /api/workspace/invites?status=open|pending|expired|accepted|revoked|all (default: open = pending + expired)
+ */
+export const listInvites = async (req, res) => {
+    try {
+        const wanted = String(req.query.status ?? "open");
+        const rows = await orm().Invite.where({ workspaceId: req.user.workspaceId }).all();
+        const inviters = new Map((await orm().User.where({ workspaceId: req.user.workspaceId }).all()).map((u) => [u.id, u.name]));
+        const data = rows
+            .filter((i) => {
+                const st = inviteStatus(i);
+                if (wanted === "all") return true;
+                if (wanted === "open") return st === "pending" || st === "expired";
+                return st === wanted;
+            })
+            .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+            .map((i) => publicInvite(i, inviters));
+        return res.status(200).json({ data });
+    } catch (error) {
+        console.error("listInvites:", error.message);
+        return res.status(500).json({ message: "Internal server error", code: "internal_error" });
+    }
+};
+
+/** PATCH /api/workspace/invites/:id { role?, allowedLocationIds? } — only while not accepted or revoked. */
+export const updateInvite = async (req, res) => {
+    try {
+        const invite = await loadOwnInvite(req, res);
+        if (!invite) return;
+        if (["accepted", "revoked"].includes(inviteStatus(invite))) return res.status(409).json({ message: `This invite was already ${inviteStatus(invite)}`, code: "conflict" });
+        const changes = {};
+        if (req.body?.role !== undefined) {
+            if (!["company_admin", "company_viewer"].includes(req.body.role)) return res.status(400).json({ message: "role must be company_admin or company_viewer", code: "validation_error" });
+            changes.role = req.body.role;
+        }
+        if (req.body?.allowedLocationIds !== undefined) {
+            const ids = req.body.allowedLocationIds;
+            if (!Array.isArray(ids)) return res.status(400).json({ message: "allowedLocationIds must be a list (empty = all locations)", code: "validation_error" });
+            const own = new Set((await orm().Location.where({ workspaceId: req.user.workspaceId }).all()).map((l) => l.id));
+            if (ids.some((id) => !own.has(id))) return res.status(400).json({ message: "allowedLocationIds contains an unknown location", code: "validation_error" });
+            changes.allowedLocationIds = ids;
+        }
+        if ((changes.role ?? invite.role) === "company_admin") changes.allowedLocationIds = []; // admins see every location
+        if (!Object.keys(changes).length) return res.status(400).json({ message: "Nothing to update", code: "validation_error" });
+        await orm().Invite.where({ id: invite.id }).update(changes);
+        await inviteAudit(req, "invite.updated", invite, { changedFields: Object.keys(changes) });
+        return res.status(200).json({ message: "Invite updated", data: publicInvite({ ...invite, ...changes }) });
+    } catch (error) {
+        console.error("updateInvite:", error.message);
+        return res.status(500).json({ message: "Internal server error", code: "internal_error" });
+    }
+};
+
+/** POST /api/workspace/invites/:id/resend — new link (the old one stops working), valid 7 more days. */
+export const resendInvite = async (req, res) => {
+    try {
+        const invite = await loadOwnInvite(req, res);
+        if (!invite) return;
+        if (["accepted", "revoked"].includes(inviteStatus(invite))) return res.status(409).json({ message: `This invite was already ${inviteStatus(invite)}`, code: "conflict" });
+        if (await orm().User.where({ email: invite.email }).first()) return res.status(409).json({ message: "This email already has an account", code: "conflict" });
+        const rawToken = crypto.randomBytes(32).toString("hex");
+        const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+        const expiresAt = new Date(Date.now() + INVITE_TTL_MS).toISOString();
+        await orm().Invite.where({ id: invite.id }).update({ tokenHash, expiresAt });
+        const emailed = await sendInviteEmail(req, invite.email, invite.role, rawToken);
+        await inviteAudit(req, "invite.resent", invite, { emailed });
+        if (!emailed) return res.status(502).json({ message: "The invite was renewed, but the email could not be sent. Try again later.", code: "email_failed" });
+        return res.status(200).json({ message: `Invite sent again to ${invite.email}`, data: publicInvite({ ...invite, expiresAt }) });
+    } catch (error) {
+        console.error("resendInvite:", error.message);
+        return res.status(500).json({ message: "Internal server error", code: "internal_error" });
+    }
+};
+
+/** DELETE /api/workspace/invites/:id — revoke: the link stops working; the row stays for the audit trail. */
+export const revokeInvite = async (req, res) => {
+    try {
+        const invite = await loadOwnInvite(req, res);
+        if (!invite) return;
+        const st = inviteStatus(invite);
+        if (st === "accepted") return res.status(409).json({ message: "This invite was already accepted. Remove the user from the team instead.", code: "conflict" });
+        if (st !== "revoked") {
+            await orm().Invite.where({ id: invite.id }).update({ revokedAt: new Date().toISOString() });
+            await inviteAudit(req, "invite.revoked", invite);
+        }
+        return res.status(200).json({ message: "Invite deleted" });
+    } catch (error) {
+        console.error("revokeInvite:", error.message);
+        return res.status(500).json({ message: "Internal server error", code: "internal_error" });
     }
 };
 
@@ -292,9 +436,10 @@ export const listTeam = async (req, res) => {
                 ...u,
                 allowedLocationIds: access.filter((a) => a.userId === u.id).map((a) => a.locationId),
             })),
+            // open invites (pending or expired), so they can be resent or deleted from the Team page
             pendingInvites: invites
-                .filter((i) => !i.acceptedAt && !i.revokedAt && new Date(i.expiresAt) > new Date())
-                .map(({ tokenHash, ...i }) => i),
+                .filter((i) => ["pending", "expired"].includes(inviteStatus(i)))
+                .map((i) => publicInvite(i)),
         });
     } catch (error) {
         console.error("listTeam:", error.message);

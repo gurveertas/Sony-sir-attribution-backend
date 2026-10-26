@@ -28,8 +28,9 @@ import { exportCustomer, eraseCustomer } from "../services/privacy.js";
 import { writeAudit } from "../services/audit.js";
 import { encryptSecret } from "../utils/crypto.js";
 import { sendError, wantsCsv, sendCsv, paginate, sortDesc } from "../services/http.js";
-import ENV from "../utils/env.js";
 import { requestRebuild } from "../services/rollups.js";
+import jwt from "jsonwebtoken";
+import { frontendBase, safeFrontendOrigin } from "../utils/frontendUrl.js";
 
 const ws = (req) => req.user.workspaceId;
 const auditUser = (req, action, extra = {}) =>
@@ -108,7 +109,7 @@ export const startAdOAuth = async (req, res) => {
     try {
         const platform = req.params.platform;
         if (!["meta", "google"].includes(platform)) return res.status(400).json({ message: "platform must be meta or google", code: "validation_error" });
-        return res.status(200).json({ url: authorizationUrl(platform, { workspaceId: ws(req), userId: req.user.id }) });
+        return res.status(200).json({ url: authorizationUrl(platform, { workspaceId: ws(req), userId: req.user.id, returnTo: frontendBase(req) }) });
     } catch (error) {
         return sendError(res, error, "startAdOAuth");
     }
@@ -116,7 +117,15 @@ export const startAdOAuth = async (req, res) => {
 
 /** GET /api/ad-accounts/oauth/:platform/callback — public: the signed state identifies the company. */
 export const adOAuthCallback = async (req, res) => {
-    const back = (q) => res.redirect?.(302, `${ENV.FRONTEND_URL}/settings?${new URLSearchParams(q)}#ad-accounts`) ?? res.status(200).json(q);
+    // back to the Ad spend screen of the dashboard the user started from (only allowed origins)
+    let returnTo = null;
+    try {
+        returnTo = jwt.decode(String(req.query.state ?? ""))?.returnTo ?? null;
+    } catch {
+        /* no state */
+    }
+    const base = safeFrontendOrigin(returnTo);
+    const back = (q) => res.redirect?.(302, `${base}/ad-spend?${new URLSearchParams(q)}`) ?? res.status(200).json(q);
     try {
         if (req.query.error) return back({ adAccounts: "cancelled" });
         const out = await completeConnection(req.params.platform, { code: req.query.code, state: req.query.state });
