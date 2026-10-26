@@ -1,435 +1,246 @@
 /**
- * Order ingestion, updates, listing, and attribution details.
- * Creation resolves the customer, finds the best touch source, computes all attribution models,
- * and writes the order plus credits atomically so partial revenue records are not visible.
- */
-
-/**
- * Orders & Conversions Controller  —  POST /v1/orders  |  PATCH /v1/orders/:id
+ * Orders & conversions — POST /v1/orders (alias /v1/conversions) | PATCH /v1/orders/:id
+ *                        GET /v1/orders | GET /v1/orders/:id/attribution
  *
- * Ingests a paid order, resolves its customer, matches it to attribution touches,
- * runs all 6 attribution models and writes AttributionCredit rows — all in one transaction.
+ * Writes go through services/ingestion.js (the one pipeline shared with connectors and replay).
  *
- * POST Body:
- *   externalId*       - your system's order ID (idempotency key)
- *   orderedAt*        - ISO timestamp of when the order was paid
- *   currency*         - ISO 4217 (e.g. "USD", "INR")
- *   grossAmount*      - gross amount (in major units, e.g. 99.99)
- *   netAmount*        - net amount after discounts/tax (major units)
- *   discountAmount?   - discount (major units)
- *   taxAmount?        - tax (major units)
- *   checkoutToken?    - token from /v1/checkout-sessions
- *   visitorId?        - client-side visitor ID (fallback if no token)
- *   email?            - customer email (for identity resolution fallback)
- *   phone?            - customer phone (for identity resolution fallback)
- *   locationId?       - your workspace location ID
- *   items?            - array of { name, quantity, unitAmount, currency, externalId? }
- *   idempotencyKey?   - custom idempotency key (defaults to externalId)
- *   connectorId?      - connector that sent this event
+ * POST body (amounts in major units, or `<name>MinorUnits` integers):
+ *   externalId*        your order id (deduplicated per company)
+ *   orderedAt*         ISO timestamp the order was paid
+ *   currency*          ISO 4217
+ *   grossAmount*       total before discounts, excluding tax (send taxIncluded: true if it includes tax)
+ *   discountAmount?    discounts (if omitted and netAmount is sent, discount = gross - net)
+ *   netAmount?         gross - discount (informational)
+ *   taxAmount?         tax
+ *   status?            paid (default) | pending | voided
+ *   checkoutToken?     token from POST /v1/checkout-sessions (strongest match)
+ *   bookingId? / bookingExternalId?   the booking this invoice pays: credit carries forward
+ *   email? phone? customerExternalId? customerExternalIdKey?   identity
+ *   visitorId?         SDK visitor id      gclid? fbclid? ttclid? msclkid?   click ids
+ *   locationId? / locationExternalId?   items?: [{ name, quantity, unitAmount, currency?, externalId? }]
  */
 
 import { db } from "../src/prisma/db.js";
-import { isPaidOrder } from "../services/customerMerge.js";
+import { tenantDb } from "../services/tenantDb.js";
+import { ingestOrder, updateOrderRecord } from "../services/ingestion.js";
 import { resolveListWindow } from "./reportsController.js";
-import { resolveOrCreateCustomer, getVisitorTouches, linkVisitorToCustomer, hashIdentifier } from "../services/identityService.js";
-import { filterTouches, buildCreditRows } from "../services/attributionEngine.js";
-import { dispatchWebhook } from "../services/webhookDispatcher.js";
-import { writeAudit } from "../services/audit.js";
+import { sendError, wantsCsv, sendCsv, paginate, sortDesc } from "../services/http.js";
+import { ATTRIBUTION_MODELS, DEFAULT_MODEL } from "../services/attributionEngine.js";
+import { decryptSecret } from "../utils/crypto.js";
+import { allowedLocationFilter } from "../services/metrics.js";
 
-const toMinorUnits = (amount, decimals = 2) => BigInt(Math.round(Number(amount) * Math.pow(10, decimals)));
+const ingestCtx = (req) => ({
+    connectorId: req.connector?.id ?? null,
+    connectorType: req.connector?.type ?? null,
+    receivedAt: req.receivedAt ?? null,
+    isTest: req.apiKey?.mode === "test" || Boolean(req.isTest),
+});
 
 export const createOrder = async (req, res) => {
     try {
-        const workspaceId = req.workspaceId;
-
-        const {
-            externalId,
-            orderedAt,
-            currency,
-            grossAmount,
-            netAmount,
-            discountAmount = 0,
-            taxAmount = 0,
-            checkoutToken,
-            visitorId,
-            email,
-            phone,
-            locationId,
-            items = [],
-            idempotencyKey,
-            connectorId,
-        } = req.body ?? {};
-
-        // Required field validation
-        if (!externalId) return res.status(400).json({ message: "externalId is required" });
-        if (!orderedAt) return res.status(400).json({ message: "orderedAt is required" });
-        if (!currency || typeof currency !== "string" || currency.length !== 3)
-            return res.status(400).json({ message: "currency must be a 3-character ISO code" });
-        if (grossAmount === undefined) return res.status(400).json({ message: "grossAmount is required" });
-        if (netAmount === undefined) return res.status(400).json({ message: "netAmount is required" });
-
-        // Idempotency: check if we've already processed this order
-        const ikey = idempotencyKey || externalId;
-        const existing = await db.orm.public.Order.where({ workspaceId, externalId }).first();
-        if (existing) {
-            const [items, credits, session] = await Promise.all([
-                db.orm.public.OrderItem.where({ orderId: existing.id }).all(),
-                db.orm.public.AttributionCredit.where({ orderId: existing.id }).all(),
-                existing.checkoutToken
-                    ? db.orm.public.CheckoutSession.where({ workspaceId, token: existing.checkoutToken }).first()
-                    : null,
-            ]);
-            const visitor = visitorId
-                ? await db.orm.public.Visitor.where({ workspaceId, visitorId }).first()
-                : session
-                    ? await db.orm.public.Visitor.where({ id: session.visitorId, workspaceId }).first()
-                    : null;
-            return res.status(200).json({
-                id: existing.id,
-                orderId: existing.id,
-                externalId: existing.externalId,
-                customerId: existing.customerId,
-                visitorId: visitor?.visitorId ?? visitorId ?? null,
-                visitorRecordId: visitor?.id ?? null,
-                connectorId: existing.connectorId,
-                locationId: existing.locationId,
-                checkoutSessionId: session?.id ?? null,
-                touchIds: [...new Set(credits.map((credit) => credit.touchId).filter(Boolean))],
-                orderItemIds: items.map((item) => item.id),
-                attributionCreditIds: credits.map((credit) => credit.id),
-                status: "already_processed",
-                message: "Duplicate order — already ingested",
-            });
-        }
-
-        const grossMinorUnits = toMinorUnits(grossAmount);
-        const netMinorUnits = toMinorUnits(netAmount);
-        const discountMinorUnits = toMinorUnits(discountAmount);
-        const taxMinorUnits = toMinorUnits(taxAmount);
-
-        // Get workspace settings for attribution
-        const workspace = await db.orm.public.Workspace.where({ id: workspaceId }).first();
-        if (!workspace) return res.status(404).json({ message: "Workspace not found" });
-
-        // ── Identity Resolution ────────────────────────────────────
-        const { customer, isNew: isNewCustomer } = await resolveOrCreateCustomer(db, workspaceId, { email, phone });
-
-        // Link visitor if provided
-        if (visitorId) await linkVisitorToCustomer(db, workspaceId, visitorId, customer.id);
-
-        // ── Touch Resolution ───────────────────────────────────────
-        let touches = [];
-        let matchMethod = "none";
-        let checkoutSessionId = null;
-        let resolvedVisitor = visitorId
-            ? await db.orm.public.Visitor.where({ workspaceId, visitorId }).first()
-            : null;
-
-        if (checkoutToken) {
-            const session = await db.orm.public.CheckoutSession.where({ token: checkoutToken, workspaceId }).first();
-            checkoutSessionId = session?.id ?? null;
-            if (session && !resolvedVisitor) {
-                resolvedVisitor = await db.orm.public.Visitor.where({
-                    id: session.visitorId,
-                    workspaceId,
-                }).first();
-            }
-            if (session && !session.consumedAt && new Date(session.expiresAt) > new Date()) {
-                // Load touch records from the frozen snapshot
-                const touchIds = (session.frozenTouches || []).map(t => t.id).filter(Boolean);
-                if (touchIds.length > 0) {
-                    const allTouches = await db.orm.public.Touch.where({ visitorId: session.visitorId }).all();
-                    touches = allTouches.filter(t => touchIds.includes(t.id));
-                }
-                matchMethod = "token";
-            }
-        }
-
-        // Fallback: resolve by email/phone → find linked visitor
-        if (touches.length === 0 && (email || phone)) {
-            if (customer) {
-                const visitors = await db.orm.public.Visitor.where({ workspaceId, customerId: customer.id }).all();
-                for (const v of visitors) {
-                    const vTouches = await db.orm.public.Touch.where({ visitorId: v.id }).all();
-                    touches.push(...vTouches);
-                }
-                if (touches.length > 0) matchMethod = email ? "email" : "phone";
-            }
-        }
-
-        // Fallback: direct visitorId
-        if (touches.length === 0 && visitorId) {
-            touches = await getVisitorTouches(workspaceId, visitorId);
-            if (touches.length > 0) matchMethod = "click_id";
-        }
-
-        // Apply lookback window filter
-        const lookbackDays = workspace.lookbackDays || 30;
-        touches = filterTouches(touches, lookbackDays, orderedAt, workspace.lookbackOverrides || {});
-
-        // ── Check new vs returning ─────────────────────────────────
-        const priorOrders = customer
-            ? await db.orm.public.Order.where({ workspaceId, customerId: customer.id }).all()
-            : [];
-        const customerIsNew = priorOrders.filter(o => isPaidOrder(o) && new Date(o.orderedAt) < new Date(orderedAt)).length === 0;
-
-        // ── Build credit rows for all 6 models ─────────────────────
-        const creditRows = buildCreditRows({
-            workspaceId,
-            orderId: null, // filled after order creation
-            touches,
-            orderedAt,
-            netMinorUnits,
-            currency,
-        });
-
-        // ── Transaction: save order + items + attribution ───────────
-        const result = await db.transaction(async (tx) => {
-            const order = await tx.orm.public.Order.create({
-                workspaceId,
-                locationId: locationId ?? null,
-                customerId: customer?.id ?? null,
-                externalId,
-                connectorId: connectorId ?? null,
-                status: "paid",
-                grossMinorUnits,
-                netMinorUnits,
-                discountMinorUnits,
-                taxMinorUnits,
-                currency: currency.toUpperCase(),
-                checkoutToken: checkoutToken ?? null,
-                matchMethod,
-                isNewCustomer: customerIsNew,
-                idempotencyKey: ikey,
-                orderedAt: new Date(orderedAt).toISOString(),
-            });
-
-            // Save order items
-            const orderItemIds = [];
-            for (const item of items) {
-                const createdItem = await tx.orm.public.OrderItem.create({
-                    orderId: order.id,
-                    name: item.name || "Item",
-                    quantity: item.quantity || 1,
-                    unitMinorUnits: toMinorUnits(item.unitAmount || 0),
-                    totalMinorUnits: toMinorUnits((item.unitAmount || 0) * (item.quantity || 1)),
-                    currency: (item.currency || currency).toUpperCase(),
-                    externalId: item.externalId ?? null,
-                });
-                orderItemIds.push(createdItem.id);
-            }
-
-            // Mark checkout session as consumed
-            if (checkoutToken) {
-                const session = await tx.orm.public.CheckoutSession.where({ token: checkoutToken, workspaceId }).first();
-                if (session) {
-                    checkoutSessionId = session.id;
-                    await tx.orm.public.CheckoutSession.where({ id: session.id }).update({
-                        consumedAt: new Date().toISOString(),
-                        consumedOrderId: order.id,
-                    });
-                }
-            }
-
-            // Save attribution credits (all 6 models)
-            const attributionCredits = [];
-            for (const row of creditRows) {
-                attributionCredits.push(
-                    await tx.orm.public.AttributionCredit.create({ ...row, orderId: order.id })
-                );
-            }
-
-            // Update customer purchase timestamps
-            if (customer) {
-                const updates = { lastPurchaseAt: new Date(orderedAt).toISOString() };
-                if (customerIsNew) updates.firstPurchaseAt = new Date(orderedAt).toISOString();
-                await tx.orm.public.Customer.where({ id: customer.id }).update(updates);
-            }
-
-            // Audit log
-            await writeAudit(tx.orm.public, {
-                workspaceId,
-                actorType: "api_key",
-                actorUserId: null,
-                action: "order.created",
-                targetType: "order",
-                targetId: order.id,
-                metadata: { externalId, matchMethod, isNewCustomer: customerIsNew, touchCount: touches.length },
-                ip: req.ip ?? null,
-                userAgent: req.headers["user-agent"] ?? null,
-            });
-
-            return { order, orderItemIds, attributionCredits };
-        });
-
-        const order = result.order;
-
-        // Dispatch outbound webhook (fire-and-forget)
-        dispatchWebhook(workspaceId, "order.created", {
-            orderId: order.id,
-            externalId: order.externalId,
-            status: order.status,
-            grossMinorUnits: order.grossMinorUnits?.toString(),
-            netMinorUnits: order.netMinorUnits?.toString(),
-            currency: order.currency,
-            matchMethod,
-            isNewCustomer: customerIsNew,
-            touchCount: touches.length,
-            orderedAt: order.orderedAt,
-        });
-
-        return res.status(201).json({
-            id: order.id,
-            orderId: order.id,
-            externalId: order.externalId,
-            customerId: order.customerId,
-            visitorId: resolvedVisitor?.visitorId ?? visitorId ?? null,
-            visitorRecordId: resolvedVisitor?.id ?? null,
-            connectorId: order.connectorId,
-            locationId: order.locationId,
-            checkoutSessionId,
-            touchIds: [...new Set(touches.map((touch) => touch.id))],
-            orderItemIds: result.orderItemIds,
-            attributionCreditIds: result.attributionCredits.map((credit) => credit.id),
-            status: order.status,
-            matchMethod,
-            isNewCustomer: customerIsNew,
-            touchCount: touches.length,
-            currency: order.currency,
-        });
+        const result = await ingestOrder(req.workspaceId, req.body ?? {}, ingestCtx(req));
+        return res.status(result.statusCode).json(result.body);
     } catch (error) {
-        console.error("createOrder error:", error.message);
-        return res.status(500).json({ message: "Internal server error while ingesting order" });
+        return sendError(res, error, "createOrder");
     }
 };
 
-/**
- * PATCH /v1/orders/:id — update order status
- */
 export const updateOrder = async (req, res) => {
     try {
-        const workspaceId = req.workspaceId;
-        const order = await db.orm.public.Order.where({ id: req.params.id, workspaceId }).first();
-        if (!order) return res.status(404).json({ message: "Order not found" });
-
-        const allowed = ["status"];
-        const changes = Object.fromEntries(
-            Object.entries(req.body ?? {}).filter(([k]) => allowed.includes(k))
-        );
-
-        if (!Object.keys(changes).length) return res.status(400).json({ message: "Nothing to update" });
-
-        await db.orm.public.Order.where({ id: order.id }).update(changes);
-
-        // Dispatch outbound webhook
-        dispatchWebhook(workspaceId, "order.updated", {
-            orderId: order.id,
-            externalId: order.externalId,
-            ...changes,
-        });
-
-        return res.status(200).json({
-            id: order.id,
-            orderId: order.id,
-            status: changes.status,
-            message: "Order updated",
-        });
+        const result = await updateOrderRecord(req.workspaceId, req.params.id, req.body ?? {}, ingestCtx(req));
+        return res.status(result.statusCode).json(result.body);
     } catch (error) {
-        console.error("updateOrder error:", error.message);
-        return res.status(500).json({ message: "Internal server error while updating order" });
+        return sendError(res, error, "updateOrder");
     }
 };
 
+/** Primary source of an order under a model: the channel holding the largest credit. */
+export function primarySource(credits) {
+    if (!credits?.length) return { channel: "direct_unknown", campaign: null };
+    const best = [...credits].sort((a, b) => Number(BigInt(b.amountMinorUnits ?? 0) - BigInt(a.amountMinorUnits ?? 0)) || Number(b.share) - Number(a.share))[0];
+    return { channel: best.channel ?? (best.touchId ? "direct" : "direct_unknown"), campaign: best.campaign ?? null, reasonCode: best.reasonCode ?? null };
+}
+
+const resolveWorkspace = (req) => req.workspaceId || req.user?.workspaceId || req.params?.workspaceId;
+
 /**
- * GET /v1/orders — list orders for this workspace
+ * GET /v1/orders — every order with its source under the selected model.
+ * Filters: from, to (company-local days), tz, model, locationId, channel, status, customerId,
+ *          newVsReturning=new|returning, refunded=true, unattributed=true, matchMethod, search (external id),
+ *          includeTest=true. Pagination: cursor or page + limit. format=csv exports every matching row.
  */
 export const listOrders = async (req, res) => {
     try {
-        const workspaceId = req.workspaceId;
-        const page = Math.max(1, parseInt(req.query.page) || 1);
-        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 25));
-        const offset = (page - 1) * limit;
+        const workspaceId = resolveWorkspace(req);
+        const t = tenantDb(db, workspaceId);
+        const workspace = await db.orm.public.Workspace.where({ id: workspaceId }).first();
+        const model = ATTRIBUTION_MODELS.includes(req.query.model) ? req.query.model : workspace?.defaultModel || DEFAULT_MODEL;
 
-        let query = db.orm.public.Order.where((o) => o.workspaceId.eq(workspaceId));
-
-        if (req.query.status) {
-            query = query.where((o) => o.status.eq(req.query.status));
-        }
-        if (req.query.locationId) {
-            query = query.where((o) => o.locationId.eq(req.query.locationId));
-        }
+        let query = t.Order.where((o) => o.workspaceId.eq(workspaceId));
         const { fromIso, toIso } = await resolveListWindow(req, workspaceId);
         if (fromIso) query = query.where((o) => o.orderedAt.gte(fromIso));
         if (toIso) query = query.where((o) => o.orderedAt.lte(toIso));
+        let orders = await query.all();
 
-        const countResult = await query.aggregate((agg) => ({ total: agg.count() }));
-        const total = countResult?.total || 0;
+        const q = req.query;
+        const allowedLocs = allowedLocationFilter(req);
+        if (allowedLocs) orders = orders.filter((o) => allowedLocs.has(o.locationId));
+        if (q.includeTest !== "true") orders = orders.filter((o) => !o.isTest);
+        if (q.status) orders = orders.filter((o) => o.status === q.status);
+        if (q.locationId) orders = orders.filter((o) => o.locationId === q.locationId);
+        if (q.customerId) orders = orders.filter((o) => o.customerId === q.customerId);
+        if (q.matchMethod) orders = orders.filter((o) => o.matchMethod === q.matchMethod);
+        if (q.newVsReturning === "new") orders = orders.filter((o) => o.customerId && o.isNewCustomer);
+        if (q.newVsReturning === "returning") orders = orders.filter((o) => o.customerId && !o.isNewCustomer);
+        if (q.refunded === "true") orders = orders.filter((o) => BigInt(o.refundedMinorUnits ?? 0) > 0n);
+        if (q.unattributed === "true") orders = orders.filter((o) => o.matchMethod === "none");
+        if (q.search) {
+            const s = String(q.search).toLowerCase();
+            orders = orders.filter((o) => String(o.externalId ?? "").toLowerCase().includes(s) || o.id === q.search);
+        }
 
-        const orders = await query
-            .orderBy((o) => o.orderedAt.desc())
-            .limit(limit)
-            .offset(offset)
-            .all();
+        // credits under the selected model, for the source column and the channel filter
+        const credits = orders.length ? await t.AttributionCredit.where({ model }).all() : [];
+        const byOrder = new Map();
+        for (const c of credits) {
+            if (!c.orderId) continue;
+            if (!byOrder.has(c.orderId)) byOrder.set(c.orderId, []);
+            byOrder.get(c.orderId).push(c);
+        }
+        if (q.channel) orders = orders.filter((o) => (byOrder.get(o.id) ?? []).some((c) => (c.channel ?? "direct_unknown") === q.channel));
+        if (q.campaign) orders = orders.filter((o) => (byOrder.get(o.id) ?? []).some((c) => (c.campaign ?? "(none)") === q.campaign));
 
-        const data = orders.map((o) => ({
-            id: o.id,
-            externalId: o.externalId,
-            status: o.status,
-            currency: o.currency,
-            netMinorUnits: o.netMinorUnits?.toString(),
-            grossMinorUnits: o.grossMinorUnits?.toString(),
-            matchMethod: o.matchMethod,
-            isNewCustomer: o.isNewCustomer,
-            locationId: o.locationId,
-            customerId: o.customerId,
-            orderedAt: o.orderedAt,
-            createdAt: o.createdAt,
-        }));
+        sortDesc(orders, "orderedAt");
+        const exporting = wantsCsv(req);
+        const { data: pageRows, pagination } = exporting ? { data: orders, pagination: null } : paginate(orders, req, "orderedAt");
 
-        return res.status(200).json({
-            data,
-            pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+        const locations = new Map((await t.Location.all()).map((l) => [l.id, l.name]));
+        const custIds = [...new Set(pageRows.map((o) => o.customerId).filter(Boolean))];
+        const customers = new Map();
+        for (const id of custIds) customers.set(id, await t.Customer.where({ id }).first());
+        const showEmail = Boolean(req.user) && !req.maskPii;
+        const itemCounts = new Map();
+        if (!exporting || pageRows.length <= 5000) {
+            for (const o of pageRows) itemCounts.set(o.id, (await db.orm.public.OrderItem.where({ orderId: o.id }).all()).map((i) => i.name));
+        }
+
+        const data = pageRows.map((o) => {
+            const src = primarySource(byOrder.get(o.id));
+            const cust = o.customerId ? customers.get(o.customerId) : null;
+            const net = BigInt(o.netMinorUnits ?? 0);
+            const refunded = BigInt(o.refundedMinorUnits ?? 0);
+            return {
+                id: o.id,
+                externalId: o.externalId,
+                status: o.status,
+                orderedAt: o.orderedAt,
+                createdAt: o.createdAt,
+                customerId: o.customerId,
+                customerEmail: showEmail && cust?.emailEnc ? decryptSecret(cust.emailEnc) : null,
+                locationId: o.locationId,
+                locationName: o.locationId ? locations.get(o.locationId) ?? null : null,
+                items: itemCounts.get(o.id) ?? [],
+                currency: o.currency,
+                grossMinorUnits: o.grossMinorUnits?.toString(),
+                discountMinorUnits: o.discountMinorUnits?.toString(),
+                taxMinorUnits: o.taxMinorUnits?.toString(),
+                netMinorUnits: net.toString(),
+                refundedMinorUnits: refunded.toString(),
+                netAfterRefundsMinorUnits: (net - refunded).toString(),
+                fxRateToReporting: o.fxRateToReporting ?? null,
+                source: src.channel,
+                campaign: src.campaign,
+                model,
+                matchMethod: o.matchMethod,
+                attributionReason: o.attributionReason ?? null,
+                isNewCustomer: o.isNewCustomer,
+                customerType: o.customerId ? (o.isNewCustomer ? "new" : "returning") : "unknown",
+                bookingId: o.bookingId ?? null,
+                isTest: Boolean(o.isTest),
+            };
         });
+
+        if (exporting) {
+            return sendCsv(res, `orders-${model}.csv`, data, [
+                "orderedAt", "externalId", "status", "customerId", "customerEmail", "locationName",
+                { key: "items", label: "items", value: (r) => r.items.join("; ") },
+                "currency", "grossMinorUnits", "discountMinorUnits", "taxMinorUnits", "netMinorUnits", "refundedMinorUnits",
+                "source", "campaign", "matchMethod", "attributionReason", "customerType", "model",
+            ]);
+        }
+        return res.status(200).json({ model, data, pagination, lastUpdated: new Date().toISOString() });
     } catch (error) {
-        if (error?.statusCode === 400) return res.status(400).json({ message: error.message });
-        console.error("listOrders error:", error.message);
-        return res.status(500).json({ message: "Internal server error while listing orders" });
+        return sendError(res, error, "listOrders");
     }
 };
 
 /**
- * GET /v1/orders/:id/attribution — get attribution credits for an order
+ * GET /v1/orders/:id/attribution — the journey plus the credit under EVERY model, side by side.
  */
 export const getOrderAttribution = async (req, res) => {
     try {
-        const workspaceId = req.workspaceId;
-        const order = await db.orm.public.Order.where({ id: req.params.id, workspaceId }).first();
-        if (!order) return res.status(404).json({ message: "Order not found" });
+        const workspaceId = resolveWorkspace(req);
+        const t = tenantDb(db, workspaceId);
+        const order = await t.Order.where({ id: req.params.id }).first().catch(() => null);
+        if (!order) return res.status(404).json({ message: "Order not found", code: "not_found" });
 
-        const credits = await db.orm.public.AttributionCredit.where({ orderId: order.id }).all();
+        const [credits, refunds, items] = await Promise.all([
+            t.AttributionCredit.where({ orderId: order.id }).all(),
+            t.Refund.where({ orderId: order.id }).all(),
+            db.orm.public.OrderItem.where({ orderId: order.id }).all(),
+        ]);
+        const touchIds = [...new Set(credits.map((c) => c.touchId).filter(Boolean))];
+        const touches = [];
+        for (const id of touchIds) {
+            const touch = await t.Touch.where({ id }).first();
+            if (touch) touches.push(touch);
+        }
+        touches.sort((a, b) => new Date(a.touchedAt) - new Date(b.touchedAt));
 
-        // Group by model
         const byModel = {};
-        for (const credit of credits) {
-            if (!byModel[credit.model]) byModel[credit.model] = [];
-            byModel[credit.model].push({
-                id: credit.id,
-                attributionCreditId: credit.id,
-                touchId: credit.touchId,
-                share: credit.share,
-                amountMinorUnits: credit.amountMinorUnits?.toString(),
-                currency: credit.currency,
+        for (const model of ATTRIBUTION_MODELS) byModel[model] = [];
+        for (const c of credits) {
+            (byModel[c.model] ??= []).push({
+                id: c.id,
+                attributionCreditId: c.id,
+                touchId: c.touchId,
+                channel: c.channel ?? (c.touchId ? null : "direct_unknown"),
+                campaign: c.campaign ?? null,
+                share: Number(c.share),
+                amountMinorUnits: c.amountMinorUnits?.toString(),
+                currency: c.currency,
+                reasonCode: c.reasonCode ?? null,
             });
         }
 
         return res.status(200).json({
             orderId: order.id,
             externalId: order.externalId,
+            status: order.status,
+            orderedAt: order.orderedAt,
+            currency: order.currency,
+            netMinorUnits: order.netMinorUnits?.toString(),
+            refundedMinorUnits: order.refundedMinorUnits?.toString(),
             matchMethod: order.matchMethod,
+            attributionReason: order.attributionReason ?? null,
+            isNewCustomer: order.isNewCustomer,
+            bookingId: order.bookingId ?? null,
+            items: items.map((i) => ({ name: i.name, quantity: i.quantity, totalMinorUnits: i.totalMinorUnits?.toString(), currency: i.currency })),
+            journey: touches.map((x) => ({
+                id: x.id,
+                touchedAt: x.touchedAt,
+                channel: x.channel,
+                source: x.source,
+                medium: x.medium,
+                campaign: x.campaign,
+                referrer: x.referrer,
+                landingPage: x.landingPage,
+                clickId: x.gclid ? "gclid" : x.fbclid ? "fbclid" : x.ttclid ? "ttclid" : x.msclkid ? "msclkid" : null,
+            })),
+            refunds: refunds.map((r) => ({ id: r.id, amountMinorUnits: r.amountMinorUnits?.toString(), currency: r.currency, refundedAt: r.refundedAt, reason: r.reason })),
             attribution: byModel,
         });
     } catch (error) {
-        console.error("getOrderAttribution error:", error.message);
-        return res.status(500).json({ message: "Internal server error while fetching attribution" });
+        return sendError(res, error, "getOrderAttribution");
     }
 };

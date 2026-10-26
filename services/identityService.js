@@ -1,135 +1,208 @@
 /**
- * Identity Resolution Service
+ * Identity resolution (scope 4.5, DFD process 5.0) — deterministic rules only.
  *
- * Resolves or creates a Customer from:
- *   1. hashed email
- *   2. hashed phone
- *   3. external ID (system-specific, e.g. Zenoti guest ID)
- *
- * Also links Visitor records to the resolved Customer.
+ *   1. Emails and phones are normalised, then hashed. With IDENTITY_HASH_KEY set the hash is a
+ *      per-company keyed HMAC (cannot be brute-forced without the key, and differs per company);
+ *      otherwise it is plain SHA-256 (legacy). Lookups always try both, and a record found by its
+ *      legacy hash is upgraded in place, so turning the key on later needs no downtime.
+ *   2. Match order: email, then phone, then the source system's external customer id.
+ *   3. A merged customer is never returned: the merge chain is followed to the surviving record.
+ *   4. No identifiers -> no customer (anonymous orders are not turned into fake customers).
  */
 
 import crypto from "crypto";
 import { db } from "../src/prisma/db.js";
 import { encryptSecret } from "../utils/crypto.js";
+import ENV from "../utils/env.js";
 
+export const normalizeEmail = (value) => {
+    if (value === null || value === undefined) return null;
+    const v = String(value).trim().toLowerCase();
+    return v.includes("@") && v.length <= 320 ? v : null;
+};
+
+/** Keeps digits (and a leading +). "00" international prefix becomes "+". Too short -> null. */
+export const normalizePhone = (value) => {
+    if (value === null || value === undefined) return null;
+    let v = String(value).trim();
+    if (v.startsWith("00")) v = `+${v.slice(2)}`;
+    const plus = v.startsWith("+");
+    const digits = v.replace(/\D/g, "");
+    if (digits.length < 6 || digits.length > 18) return null;
+    return plus ? `+${digits}` : digits;
+};
+
+/** Legacy hash: SHA-256 of the trimmed, lower-cased raw value. Kept for matching old rows. */
 export const hashIdentifier = (value) =>
     crypto.createHash("sha256").update(String(value).trim().toLowerCase()).digest("hex");
 
+/** Current hash of a NORMALISED value for a company. */
+export const keyedHash = (normalizedValue, workspaceId) =>
+    ENV.IDENTITY_HASH_KEY
+        ? crypto.createHmac("sha256", ENV.IDENTITY_HASH_KEY).update(`${workspaceId}:${normalizedValue}`).digest("hex")
+        : hashIdentifier(normalizedValue);
+
+/** Every hash under which this identifier may have been stored (current first). */
+function candidateHashes(raw, normalized, workspaceId) {
+    const set = new Set([keyedHash(normalized, workspaceId), hashIdentifier(normalized), hashIdentifier(raw)]);
+    return [...set];
+}
+
+async function followMerge(orm, customer) {
+    let current = customer;
+    for (let i = 0; current?.mergedIntoId && i < 10; i++) {
+        const next = await orm.Customer.where({ id: current.mergedIntoId, workspaceId: current.workspaceId }).first();
+        if (!next) break;
+        current = next;
+    }
+    return current;
+}
+
+async function findByHash(orm, workspaceId, field, hashes) {
+    for (const h of hashes) {
+        const found = await orm.Customer.where({ workspaceId, [field]: h }).first();
+        if (found) return found;
+    }
+    return null;
+}
+
+const readExternalIds = (c) => {
+    if (!c?.externalIds) return {};
+    try {
+        return typeof c.externalIds === "string" ? JSON.parse(c.externalIds) : c.externalIds;
+    } catch {
+        return {};
+    }
+};
+
 /**
- * Resolves a customer using email hash, phone hash, or external IDs.
- * If no match: creates a new customer.
- * If a match is found: returns existing customer.
- * Call inside a transaction when combined with order/booking creation.
+ * Resolve (and optionally create) the customer for a set of identifiers.
  *
- * @param {object} client - db or transaction client
+ * @param {object} client     db or transaction client
  * @param {string} workspaceId
- * @param {object} identifiers - { email?, phone?, externalId?, externalIdKey? }
- * @returns {Promise<{ customer, isNew }>}
+ * @param {{email?, phone?, externalId?, externalIdKey?}} identifiers
+ * @param {{create?: boolean}} options
+ * @returns {Promise<{customer: object|null, isNew: boolean, matchedBy: "email"|"phone"|"external_id"|null}>}
  */
-export async function resolveOrCreateCustomer(client, workspaceId, identifiers = {}) {
+export async function resolveCustomer(client, workspaceId, identifiers = {}, { create = true } = {}) {
     const orm = client.orm.public;
-    const { email, phone, externalId, externalIdKey = "default" } = identifiers;
+    const email = normalizeEmail(identifiers.email);
+    const phone = normalizePhone(identifiers.phone);
+    const externalId = identifiers.externalId ? String(identifiers.externalId) : null;
+    const externalIdKey = identifiers.externalIdKey || "default";
 
-    const emailHash = email ? hashIdentifier(email) : null;
-    const phoneHash = phone ? hashIdentifier(phone) : null;
+    if (!email && !phone && !externalId) return { customer: null, isNew: false, matchedBy: null };
 
-    // Try email hash first
-    if (emailHash) {
-        const existing = await orm.Customer.where({ workspaceId, emailHash }).first();
-        if (existing) {
-            if (email && !existing.emailEnc) {
-                await orm.Customer.where({ id: existing.id }).update({
-                    emailEnc: encryptSecret(String(email).trim().toLowerCase()),
-                });
-            }
-            return { customer: existing, isNew: false };
-        }
+    const emailHashes = email ? candidateHashes(identifiers.email, email, workspaceId) : [];
+    const phoneHashes = phone ? candidateHashes(identifiers.phone, phone, workspaceId) : [];
+    const emailHash = email ? keyedHash(email, workspaceId) : null;
+    const phoneHash = phone ? keyedHash(phone, workspaceId) : null;
+
+    let found = null;
+    let matchedBy = null;
+    if (email) {
+        found = await findByHash(orm, workspaceId, "emailHash", emailHashes);
+        if (found) matchedBy = "email";
+    }
+    if (!found && phone) {
+        found = await findByHash(orm, workspaceId, "phoneHash", phoneHashes);
+        if (found) matchedBy = "phone";
+    }
+    if (!found && externalId) {
+        // externalIds is a small JSON map per customer; scan only when an external id is given.
+        const all = await orm.Customer.where({ workspaceId }).all();
+        found = all.find((c) => readExternalIds(c)[externalIdKey] === externalId) ?? null;
+        if (found) matchedBy = "external_id";
     }
 
-    // Try phone hash second
-    if (phoneHash) {
-        const existing = await orm.Customer.where({ workspaceId, phoneHash }).first();
-        if (existing) {
-            // Optionally attach email hash to existing record if not already set
-            const updates = {};
-            if (emailHash && !existing.emailHash) updates.emailHash = emailHash;
-            if (email && !existing.emailEnc) {
-                updates.emailEnc = encryptSecret(String(email).trim().toLowerCase());
-            }
-            if (Object.keys(updates).length > 0) {
-                await orm.Customer.where({ id: existing.id }).update(updates);
-            }
-            return { customer: existing, isNew: false };
+    if (found) {
+        const customer = await followMerge(orm, found);
+        // Fill in identifiers the record lacks, and upgrade legacy hashes to the current scheme.
+        const updates = {};
+        if (emailHash && (!customer.emailHash || (matchedBy === "email" && customer.emailHash !== emailHash && emailHashes.includes(customer.emailHash)))) {
+            updates.emailHash = emailHash;
         }
+        if (email && !customer.emailEnc) updates.emailEnc = encryptSecret(email);
+        if (phoneHash && (!customer.phoneHash || (matchedBy === "phone" && customer.phoneHash !== phoneHash && phoneHashes.includes(customer.phoneHash)))) {
+            updates.phoneHash = phoneHash;
+        }
+        if (externalId) {
+            const ext = readExternalIds(customer);
+            if (!ext[externalIdKey]) updates.externalIds = { ...ext, [externalIdKey]: externalId };
+        }
+        if (Object.keys(updates).length) {
+            await orm.Customer.where({ id: customer.id, workspaceId }).update(updates);
+            Object.assign(customer, updates);
+        }
+        return { customer, isNew: false, matchedBy };
     }
 
-    // Try external ID
-    if (externalId && externalIdKey) {
-        const allCustomers = await orm.Customer.where({ workspaceId }).all();
-        const matched = allCustomers.find(c => {
-            if (!c.externalIds) return false;
-            try {
-                const ext = typeof c.externalIds === "string" ? JSON.parse(c.externalIds) : c.externalIds;
-                return ext[externalIdKey] === externalId;
-            } catch {
-                return false;
-            }
-        });
-        if (matched) {
-            const updates = {};
-            if (emailHash && !matched.emailHash) updates.emailHash = emailHash;
-            if (email && !matched.emailEnc) {
-                updates.emailEnc = encryptSecret(String(email).trim().toLowerCase());
-            }
-            if (phoneHash && !matched.phoneHash) updates.phoneHash = phoneHash;
-            if (Object.keys(updates).length > 0) {
-                await orm.Customer.where({ id: matched.id }).update(updates);
-            }
-            return { customer: matched, isNew: false };
-        }
-    }
+    if (!create) return { customer: null, isNew: false, matchedBy: null };
 
-    // Create new customer
-    const newCustomer = await orm.Customer.create({
+    const customer = await orm.Customer.create({
         workspaceId,
-        emailHash: emailHash ?? null,
-        emailEnc: email ? encryptSecret(String(email).trim().toLowerCase()) : null,
-        phoneHash: phoneHash ?? null,
+        emailHash,
+        emailEnc: email ? encryptSecret(email) : null,
+        phoneHash,
         externalIds: externalId ? { [externalIdKey]: externalId } : null,
     });
+    return { customer, isNew: true, matchedBy: email ? "email" : phone ? "phone" : "external_id" };
+}
 
-    return { customer: newCustomer, isNew: true };
+/** Back-compat wrapper used by older call sites. */
+export async function resolveOrCreateCustomer(client, workspaceId, identifiers = {}) {
+    const { customer, isNew } = await resolveCustomer(client, workspaceId, identifiers);
+    return { customer, isNew };
 }
 
 /**
- * Links a visitor (by SDK visitor ID) to a customer.
- * Upserts the Visitor record and sets customerId.
- *
- * @param {object} client - db or transaction client
- * @param {string} workspaceId
- * @param {string} visitorSdkId - the client-side visitor ID
- * @param {string} customerId
+ * Find or create the Visitor row for an SDK visitor id. Visitors may be created by identify/checkout
+ * before any touch was recorded (e.g. a direct visitor), so later touches still link up.
  */
-export async function linkVisitorToCustomer(client, workspaceId, visitorSdkId, customerId) {
-    if (!visitorSdkId) return;
+export async function ensureVisitor(client, workspaceId, visitorSdkId) {
+    if (!visitorSdkId) return null;
     const orm = client.orm.public;
     const existing = await orm.Visitor.where({ workspaceId, visitorId: visitorSdkId }).first();
-    if (existing) {
-        if (existing.customerId !== customerId) {
-            await orm.Visitor.where({ id: existing.id }).update({ customerId, lastSeenAt: new Date().toISOString() });
-        }
+    if (existing) return existing;
+    try {
+        return await orm.Visitor.create({ workspaceId, visitorId: visitorSdkId });
+    } catch (err) {
+        // concurrent create for the same visitor: read the winner
+        const again = await orm.Visitor.where({ workspaceId, visitorId: visitorSdkId }).first();
+        if (again) return again;
+        throw err;
     }
 }
 
 /**
- * Looks up a Visitor by SDK visitor ID and returns their touches.
- * Used for matching when a checkout token is not available.
+ * Link a visitor (device/browser) to a customer. A customer may have many visitors (phone + laptop).
  */
-export async function getVisitorTouches(workspaceId, visitorSdkId) {
+export async function linkVisitorToCustomer(client, workspaceId, visitorSdkId, customerId) {
+    if (!visitorSdkId || !customerId) return null;
+    const orm = client.orm.public;
+    const visitor = await ensureVisitor(client, workspaceId, visitorSdkId);
+    if (visitor && visitor.customerId !== customerId) {
+        await orm.Visitor.where({ id: visitor.id, workspaceId }).update({ customerId, lastSeenAt: new Date().toISOString() });
+        visitor.customerId = customerId;
+    }
+    return visitor;
+}
+
+/** Touches of one SDK visitor id (empty when unknown). */
+export async function getVisitorTouches(workspaceId, visitorSdkId, client = db) {
     if (!visitorSdkId) return [];
-    const orm = db.orm.public;
+    const orm = client.orm.public;
     const visitor = await orm.Visitor.where({ workspaceId, visitorId: visitorSdkId }).first();
     if (!visitor) return [];
-    return orm.Touch.where({ visitorId: visitor.id }).all();
+    return orm.Touch.where({ workspaceId, visitorId: visitor.id }).all();
+}
+
+/** Touches of every visitor linked to a customer. */
+export async function getCustomerTouches(client, workspaceId, customerId) {
+    if (!customerId) return [];
+    const orm = client.orm.public;
+    const visitors = await orm.Visitor.where({ workspaceId, customerId }).all();
+    const out = [];
+    for (const v of visitors) out.push(...(await orm.Touch.where({ workspaceId, visitorId: v.id }).all()));
+    return out;
 }

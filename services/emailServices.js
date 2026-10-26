@@ -12,7 +12,7 @@ export async function sendEmail({ to, subject, html }) {
   });
 
   if (error) {
-    console.error("Email delivery request failed:", error);
+    console.error("Email delivery request failed:", error?.name ?? "error", error?.message ?? "");
     throw new Error("Unable to send email");
   }
 

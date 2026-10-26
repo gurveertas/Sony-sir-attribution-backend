@@ -44,6 +44,12 @@ T.ApiKey = [
     { id: "k6", keyHash: sha(KEYS.suspended), type: "secret", mode: "live", workspaceId: "ws3", allowedOrigins: [], revokedAt: null, expiresAt: null, siteId: null, rateLimitPerMin: 1000 },
     { id: "k5", keyHash: sha(KEYS.limited), type: "secret", mode: "live", workspaceId: "ws1", allowedOrigins: [], revokedAt: null, expiresAt: null, siteId: null, rateLimitPerMin: 3 },
 ];
+// live keys only work once the company has a verified domain (scope 4.1)
+T.Site = [
+    { id: "s1", workspaceId: "ws1", domain: "shop.example.com", verifiedAt: "2026-01-01T00:00:00Z" },
+    { id: "s2", workspaceId: "ws2", domain: "two.example.com", verifiedAt: "2026-01-01T00:00:00Z" },
+    { id: "s3", workspaceId: "ws3", domain: "three.example.com", verifiedAt: "2026-01-01T00:00:00Z" },
+];
 T.Workspace = [{ id: "ws1", timezone: "Asia/Kolkata", status: "active" }, { id: "ws2", timezone: "UTC", status: "active" }, { id: "ws3", timezone: "UTC", status: "suspended" }];
 const o = (id, ws, at, net) => ({ id, workspaceId: ws, status: "paid", orderedAt: at, netMinorUnits: net, isNewCustomer: true });
 T.Order = [

@@ -55,3 +55,10 @@ export async function writeAudit(orm, entry, { required = false } = {}) {
     );
     return null;
 }
+
+/** Remove a company's audit entries (only used when the whole company is deleted on request). */
+export async function deleteAuditEntries(orm, workspaceId) {
+    if (!hasAuditStore(orm) || !workspaceId) return 0;
+    await orm.AuditLog.where({ workspaceId }).delete();
+    return 1;
+}

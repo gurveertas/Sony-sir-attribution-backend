@@ -1,19 +1,13 @@
 /**
- * Inbound provider webhook handlers.
- * Each handler verifies the provider signature, saves the raw event, normalizes provider data,
- * and then delegates to the shared order, booking, or refund pipeline.
- * Saving the raw event first is what makes failed deliveries replayable.
- */
-
-/**
  * Connector Webhook Controllers
  *
  * Each connector:
  * 1. Verifies the webhook signature
- * 2. Saves the raw payload to RawEvent (before any processing)
- * 3. Normalizes the payload to a canonical event and delegates to order/booking/refund ingestion
- *    (services/connectorProcessors.js — the same code the replay tool uses)
- * 4. Records connector health (lastEventAt, healthy / failing, error count)
+ * 2. Saves the raw payload to RawEvent (before any processing) and acknowledges immediately
+ * 3. The event queue normalizes the payload to a canonical event and runs the shared ingestion
+ *    pipeline (services/connectorProcessors.js -> services/ingestion.js — the same code replay uses),
+ *    retrying with backoff and parking repeated failures in the dead-letter state
+ * 4. Connector health (lastEventAt, healthy / failing, error count) is recorded by the queue
  *
  * Routes accept the connector id either as a path param (/stripe/webhook/:connectorId — used for
  * webhooks we create automatically) or as ?connectorId= (legacy / manually configured webhooks).
@@ -23,16 +17,8 @@
 
 import crypto from "crypto";
 import { getConnectorConfig, getNestedValue, getRawBody, verifyHmacSignature } from "../utils/connectorConfig.js";
-import { processConnectorEvent } from "../services/connectorProcessors.js";
-import {
-    lookupConnector,
-    lookupWorkspace,
-    markConnectorFailure,
-    markConnectorSuccess,
-    markRawEvent,
-    saveRawEvent,
-    touchLastEvent,
-} from "../services/connectorRuntime.js";
+import { lookupConnector, lookupWorkspace } from "../services/connectorRuntime.js";
+import { acceptEvent } from "../services/eventQueue.js";
 import { GatewayError } from "../services/gateways/http.js";
 import { verifyWebhookSignature as verifyPayPalSignature } from "../services/gateways/paypal.js";
 
@@ -85,22 +71,21 @@ async function resolveConnector(req, res, allowedTypes, wrongTypeMessage) {
     return connector;
 }
 
-/** Persist -> process -> record health -> respond. Shared by every connector. */
+/**
+ * Persist -> acknowledge -> process in the background (services/eventQueue.js).
+ * The gateway gets its 200 as soon as the raw payload is stored (scope 4.12: acknowledge within
+ * 200 ms, process asynchronously). If the payload cannot be stored we answer 503 so the gateway
+ * retries: an event is never acknowledged and then lost.
+ */
 async function ingest({ res, connector, source, eventType, payload, label }) {
-    const rawEvent = await saveRawEvent(connector.workspaceId, connector.id, source, eventType, payload);
-    touchLastEvent(connector.id);
-
+    let raw;
     try {
-        const result = await processConnectorEvent({ connector, eventType, payload });
-        await markRawEvent(rawEvent?.id, "processed");
-        markConnectorSuccess(connector);
-        return res.status(200).json({ received: true, ...result });
+        raw = await acceptEvent({ workspaceId: connector.workspaceId, connector, source, eventType, payload });
     } catch (err) {
-        await markRawEvent(rawEvent?.id, "failed", err.message);
-        markConnectorFailure(connector, err.message);
-        console.error(`${label} error:`, err.message);
-        return res.status(500).json({ message: "Processing failed" });
+        console.error(`${label}: could not store event:`, err.message);
+        return res.status(503).json({ message: "Temporarily unable to accept events, please retry" });
     }
+    return res.status(200).json({ received: true, eventId: raw.id });
 }
 
 // ── Stripe ───────────────────────────────────────────────────────────────────

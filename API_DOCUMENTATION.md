@@ -806,6 +806,9 @@ Returns fractional credits for an order under each attribution model.
     }
     ```
   * **Response `201 Created`:** Includes `id` / `refundId`, `orderId`, `externalOrderId`, `externalId`, and updated `orderStatus`, plus the refund amount and currency. A duplicate refund returns the existing refund and order IDs with HTTP `200`.
+* **List Refunds:** `GET /v1/refunds` (secret key), `GET /api/workspace/refunds` (dashboard session), `GET /api/view/refunds/workspace/:workspaceId` (platform admin, support session)
+  * **Query:** `from`, `to` (local days, by refund date), `tz`, `model` (for the order's source), `locationId`, `channel`, `orderId`, `search` (refund or order external id), `includeTest=true`, `page`/`limit` or `cursor`, `format=csv`.
+  * **Response `200`:** `{ model, data: [{ id, externalId, refundedAt, amountMinorUnits, currency, reason, orderId, orderExternalId, orderedAt, orderNetMinorUnits, customerId, locationName, source, campaign }], pagination, totals: { refunds, amountMinorUnits } }`, newest first.
 
 ### 8.10 Customers & Attribution Journey APIs
 * **Company customer list:** `GET /api/workspace/customers`

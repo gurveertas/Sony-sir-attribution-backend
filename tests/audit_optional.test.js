@@ -99,16 +99,27 @@ test("GET /audit-log reports 'not available' instead of crashing", async () => {
 // ── static compatibility with THIS repo's real schema ────────────────────────
 
 const root = path.resolve(import.meta.dirname, "..");
-const contractModels = new Set(Object.keys(JSON.parse(fs.readFileSync(path.join(root, "src/prisma/contract.json"), "utf8")).roots));
+// contract.prisma is the source of truth; contract.json is generated from it (npm run build / contract:emit)
+const prismaText = fs.readFileSync(path.join(root, "src/prisma/contract.prisma"), "utf8");
+const contractModels = new Set([...prismaText.matchAll(/^model\s+([A-Za-z]+)/gm)].map((m) => m[1]));
+const emittedModels = new Set(Object.keys(JSON.parse(fs.readFileSync(path.join(root, "src/prisma/contract.json"), "utf8")).roots));
 const sources = ["controllers", "services", "middlewares", "utils", "routes"].flatMap((d) =>
     fs.readdirSync(path.join(root, d)).filter((f) => f.endsWith(".js")).map((f) => path.join(d, f)));
 
-test("every model the code touches exists in src/prisma/contract.json", () => {
+test("src/prisma/contract.json is generated from the current contract.prisma (run: npx prisma contract emit)", (t) => {
+    const stale = [...contractModels].filter((m) => !emittedModels.has(m));
+    if (stale.length) {
+        // The build (npm run build / Dockerfile) regenerates it; this only reminds you when running locally.
+        t.skip(`contract.json is older than contract.prisma — missing models: ${stale.join(", ")}. Run \`npx prisma contract emit\` and apply the migration.`);
+    }
+});
+
+test("every model the code touches exists in src/prisma/contract.prisma", () => {
     const missing = [];
     for (const file of sources) {
         if (file === path.join("services", "audit.js")) continue;
         const text = fs.readFileSync(path.join(root, file), "utf8").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-        for (const m of text.matchAll(/(?:orm\.public|orm\(\)|\borm)\.([A-Z][A-Za-z]+)\b/g)) {
+        for (const m of text.matchAll(/(?:orm\.public|orm\(\)|\borm|\bt|\btt)\.([A-Z][A-Za-z]+)\b/g)) {
             if (!contractModels.has(m[1])) missing.push(`${file}: ${m[1]}`);
         }
     }

@@ -1,17 +1,14 @@
-/**
- * Cross-workspace platform administration.
- * Routes are protected by platform-admin authorization; every mutation still validates the target workspace
- * and records an audit reason so administrative actions remain reviewable.
- */
-
 
 import { db } from "../src/prisma/db.js";
 import { writeAudit } from "../services/audit.js";
+import { validateWorkspaceSettings, scheduleRebuildIfNeeded } from "../services/workspaceSettings.js";
+import { workspaceStats } from "./platformToolsController.js";
 
 const orm = (client = db) => client.orm.public;
 const ADMIN_ROLE = "platform_admin";
 
 const WORKSPACE_STATUSES = new Set([
+  "pending",
   "active",
   "suspended",
   "closed",
@@ -252,7 +249,15 @@ export const listWorkspaces = async (req, res) => {
       String(b.createdAt).localeCompare(String(a.createdAt))
     );
 
-    return res.json(pageRows(rows, req));
+    // company list (4.9): status, plan, country, events per day, last event time, integration health
+    const page = pageRows(rows, req);
+    const stats = await workspaceStats(page.data.map((w) => w.id));
+    page.data = page.data.map(({ emailVerificationHash, ...w }) => ({
+      ...w,
+      emailVerified: !emailVerificationHash,
+      ...(stats.get(w.id) ?? {}),
+    }));
+    return res.json(page);
   } catch (error) {
     console.error("listWorkspaces:", error.message);
 
@@ -368,65 +373,49 @@ export const setWorkspaceStatus = async (req, res) => {
   try {
     if (!requirePlatformAdmin(req, res)) return;
 
-    // const reason = await requireReason(req, res);
-    // if (!reason) return;
-
-    const { status, suspendedReason = null } = req.body ?? {};
-
+    const { status } = req.body ?? {};
     if (!WORKSPACE_STATUSES.has(status)) {
-      return res.status(400).json({
-        message: "Invalid workspace status.",
-      });
+      return res.status(400).json({ message: "Invalid workspace status." });
     }
 
-    const workspace = await getWorkspaceOr404(
-      req.params.workspaceId,
-      res
-    );
-
+    const workspace = await getWorkspaceOr404(req.params.workspaceId, res);
     if (!workspace) return;
 
-    // await audit(req, `admin.workspace_status_${status}`, {
-    //   workspaceId: workspace.id,
-    //   targetType: "workspace",
-    //   targetId: workspace.id,
-    //   reason,
-    //   metadata: {
-    //     previousStatus: workspace.status,
-    //     newStatus: status,
-    //   },
-    // });
+    // Suspending or closing a company is always explained (it is shown to the company in its audit log).
+    const reason = String(req.body?.suspendedReason ?? req.body?.reason ?? "").trim();
+    if ((status === "suspended" || status === "closed") && reason.length < 5) {
+      return res.status(400).json({ message: "Provide a reason of at least 5 characters." });
+    }
 
     const changes = {
       status,
-      suspendedReason:
-        status === "suspended"
-          ? String(suspendedReason ?? reason).slice(0, 1000)
-          : null,
+      suspendedReason: status === "suspended" || status === "closed" ? reason.slice(0, 1000) : null,
     };
-
+    // Approval (pending -> active) and reactivation record who approved it the first time.
     if (status === "active" && !workspace.approvedAt) {
       changes.approvedAt = now();
       changes.approvedBy = req.user.id;
     }
-    const members = orm().User.where({workspaceId : workspace.id}).update({status : "deactivated"});
-    const updated = await orm()
-      .Workspace.where({ id: workspace.id })
-      .update(changes);
 
-    return res.json({
-      message: `Workspace status set to ${status}.`,
-      data: updated,
+    // Users are NOT deactivated: protectRoute / apiKeyAuth already refuse every request of a
+    // non-active company, and reactivating must restore access exactly as it was.
+    await orm().Workspace.where({ id: workspace.id }).update(changes);
+    await audit(req, `admin.workspace_${status === "active" && workspace.status === "pending" ? "approved" : `status_${status}`}`, {
+      workspaceId: workspace.id,
+      targetType: "workspace",
+      targetId: workspace.id,
+      reason: reason || null,
+      metadata: { previousStatus: workspace.status, newStatus: status },
     });
+
+    const updated = await orm().Workspace.where({ id: workspace.id }).first();
+    const { emailVerificationHash: _h, ...safe } = updated ?? {};
+    return res.json({ message: `Workspace status set to ${status}.`, data: safe });
   } catch (error) {
     console.error("setWorkspaceStatus:", error.message);
-
-    return res.status(500).json({
-      message: "Could not update workspace status.",
-    });
+    return res.status(500).json({ message: "Could not update workspace status." });
   }
 };
-
 
 const ALLOWED_WORKSPACE_SETTINGS = new Set([
   "name",
@@ -442,7 +431,8 @@ const ALLOWED_WORKSPACE_SETTINGS = new Set([
   "consentMode",
   "rawRetentionMonths",
   "plan",
-  "status",
+  "timezone",
+  "taxIncludedInRevenue",
 ]);
 
 // PATCH /workspaces/:workspaceId/settings
@@ -466,7 +456,7 @@ export const updateWorkspaceSettings = async (req, res) => {
 
     delete changes.id;
     delete changes.slug;
-    // delete changes.status;
+    delete changes.status; // status changes go through PATCH /status (reason + audit)
     delete changes.approvedAt;
     delete changes.approvedBy;
 
@@ -476,21 +466,24 @@ export const updateWorkspaceSettings = async (req, res) => {
       });
     }
 
-    // await audit(req, "admin.workspace_settings_updated", {
-    //   workspaceId: workspace.id,
-    //   targetType: "workspace",
-    //   targetId: workspace.id,
-    //   reason,
-    //   metadata: { changedFields: Object.keys(changes) },
-    // });
+    const problem = validateWorkspaceSettings(changes);
+    if (problem) return res.status(400).json({ message: problem });
 
-    const updated = await orm().Workspace
-      .where({ id: workspace.id })
-      .update(changes);
+    await orm().Workspace.where({ id: workspace.id }).update(changes);
+    await audit(req, "admin.workspace_settings_updated", {
+      workspaceId: workspace.id,
+      targetType: "workspace",
+      targetId: workspace.id,
+      reason: reasonFrom(req) || null,
+      metadata: { changedFields: Object.keys(changes) },
+    });
+    await scheduleRebuildIfNeeded(workspace.id, Object.keys(changes), req.user.id);
 
+    const updated = await orm().Workspace.where({ id: workspace.id }).first();
+    const { emailVerificationHash: _h, ...safe } = updated ?? {};
     return res.json({
       message: "Workspace settings updated.",
-      data: updated,
+      data: safe,
     });
   } catch (error) {
     console.error("updateWorkspaceSettings:", error.message);
@@ -559,9 +552,10 @@ export const updateUser = async (req, res) => {
       )
     );
 
+    // A company user can never become a platform admin (platform admins belong to no company);
+    // platform admins are created through /api/user/add-platform-admin.
     if (changes.role &&
-        !["platform_admin", "company_admin", "company_viewer"]
-          .includes(changes.role)) {
+        (!["company_admin", "company_viewer"].includes(changes.role) || user.role === ADMIN_ROLE)) {
       return res.status(400).json({ message: "Invalid role." });
     }
 
@@ -584,24 +578,23 @@ export const updateUser = async (req, res) => {
       });
     }
 
-    // await audit(req, "admin.user_updated", {
-    //   workspaceId: user.workspaceId ?? null,
-    //   targetType: "user",
-    //   targetId: user.id,
-    //   reason,
-    //   metadata: {
-    //     changedFields: Object.keys(changes),
-    //     previousRole: user.role,
-    //     newRole: changes.role ?? user.role,
-    //     previousStatus: user.status,
-    //     newStatus: changes.status ?? user.status,
-    //   },
-    // });
-
     await orm().User.where({ id: user.id }).update(changes);
+    await audit(req, "admin.user_updated", {
+      workspaceId: user.workspaceId ?? null,
+      targetType: "user",
+      targetId: user.id,
+      reason: reasonFrom(req) || null,
+      metadata: {
+        changedFields: Object.keys(changes),
+        previousRole: user.role,
+        newRole: changes.role ?? user.role,
+        previousStatus: user.status,
+        newStatus: changes.status ?? user.status,
+      },
+    });
 
     const updated = await orm().User.where({ id: user.id }).first();
-    const { passwordHash, ...safeUser } = updated ?? {};
+    const { passwordHash, twoFactorSecretEnc, ...safeUser } = updated ?? {};
 
     return res.json({
       message: "User updated.",
@@ -880,29 +873,35 @@ export const getApiFromWorkspace = async (req, res) => {
   
 }
 export const deleteUser = async (req, res) => {
-    try {
-        if (req.user?.role !== "platform_admin") {
-            return res.status(403).json({
-                message: "Only platform admins can delete users"
-            });
-        }
+  try {
+    if (!requirePlatformAdmin(req, res)) return;
+    const userId = req.params.userId;
+    if (!validId(userId)) return res.status(400).json({ message: "Invalid user id." });
+    if (userId === req.user.id) return res.status(400).json({ message: "You cannot delete your own account." });
 
-        const userId = req.params.userId;
-
-        if (!userId) {
-            return res.status(400).json({
-                message: "No user id given in URL"
-            });
-        }
-        await orm().User.where({ id: userId }).delete();
-
-        return res.status(200).json({
-            message: "User deleted successfully"
-        });
-    } catch (error) {
-        console.error(error);
-        return res.status(500).json({
-            message: "Internal server error deleting user"
-        });
+    const user = await orm().User.where({ id: userId }).first();
+    if (!user) return res.status(404).json({ message: "User not found." });
+    if (user.role === ADMIN_ROLE) {
+      return res.status(400).json({ message: "Platform admins are removed through /api/user/platform-admins/:id." });
     }
+
+    let outcome = "deleted";
+    try {
+      await orm().User.where({ id: user.id }).delete();
+    } catch (err) {
+      if (err?.code !== "23503") throw err;
+      await orm().User.where({ id: user.id }).update({ status: "deactivated" });
+      outcome = "deactivated";
+    }
+    await audit(req, outcome === "deleted" ? "admin.user_deleted" : "admin.user_deactivated", {
+      workspaceId: user.workspaceId ?? null,
+      targetType: "user",
+      targetId: user.id,
+      reason: reasonFrom(req) || null,
+    });
+    return res.status(200).json({ message: outcome === "deleted" ? "User deleted successfully" : "User has history, so it was deactivated instead", outcome });
+  } catch (error) {
+    console.error("platform deleteUser:", error.message);
+    return res.status(500).json({ message: "Internal server error deleting user" });
+  }
 };

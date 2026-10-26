@@ -1,10 +1,4 @@
 /**
- * Company-facing connector administration and event replay.
- * These handlers manage connector configuration and expose event status without leaking secrets or raw payloads by default.
- * Every lookup must remain scoped to the authenticated user's workspace.
- */
-
-/**
  * Connector Management Controller  —  /api/workspace/connectors/*
  *
  * Company admins create and manage their inbound connectors
@@ -258,6 +252,8 @@ export const listConnectorEvents = async (req, res) => {
             status: e.status,
             error: e.error,
             replayCount: e.replayCount,
+            attempts: e.attempts ?? 0,
+            nextAttemptAt: e.nextAttemptAt ?? null,
             receivedAt: e.receivedAt,
             processedAt: e.processedAt,
             hasPayload: !!e.payload,
@@ -316,6 +312,8 @@ async function replayOne(connector, rawEvent) {
             connector,
             eventType: rawEvent.eventType,
             payload: rawEvent.payload,
+            receivedAt: rawEvent.receivedAt ?? null,
+            isTest: Boolean(rawEvent.isTest),
         });
         await markRawEvent(rawEvent.id, "processed");
         markConnectorSuccess(connector);

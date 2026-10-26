@@ -1,8 +1,3 @@
-/**
- * Small catalog endpoints used by setup forms, such as supported gateways or payment methods.
- * These handlers provide input options; they do not perform payment processing or attribution.
- */
-
 import {db} from '../src/prisma/db.js';
 
 export const getIndustryList = async (req, res) => {

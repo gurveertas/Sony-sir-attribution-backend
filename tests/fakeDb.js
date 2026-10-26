@@ -84,6 +84,9 @@ export function createFakeDb({ failOn = {} } = {}) {
             return { ...row };
         },
         where: (c) => query(name, [c]),
+        // the real ORM also allows Model.all() / Model.first() without a filter
+        all: () => query(name, []).all(),
+        first: () => query(name, []).first(),
     });
 
     const orm = { public: new Proxy({}, { get: (_t, name) => (state.missing.has(name) ? undefined : model(name)) }) };

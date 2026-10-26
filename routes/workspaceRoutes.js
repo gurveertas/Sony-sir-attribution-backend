@@ -29,17 +29,11 @@ import {
     deleteWebhookEndpoint,
     getAuditLog,
 } from "../controllers/workspaceController.js";
-import {
-    getDashboardOverview,
-    getSummaryReport,
-    getChannelsReport,
-    getCampaignsReport,
-    getLocationsReport,
-    getTrendReport,
-    getCustomersReport,
-} from "../controllers/reportsController.js";
+import * as reports from "../controllers/reportsController.js";
 import { listCustomers, getCustomerJourney, mergeCustomersHandler } from "../controllers/customerController.js";
-import { listOrders } from "../controllers/orderController.js";
+import { listOrders, getOrderAttribution } from "../controllers/orderController.js";
+import { listRefunds } from "../controllers/refundController.js";
+import * as tools from "../controllers/workspaceToolsController.js";
 import { listBookings, listUpcomingBookings } from "../controllers/bookingController.js";
 
 const router = Router();
@@ -48,38 +42,37 @@ const router = Router();
 router.post("/invites/accept", acceptInvite);
 
 router.use(protectRoute);
-router.delete("/:workspaceId", deleteWorkspace);
 
 
 // ── Settings (company_admin only) ──────────────────────────────────────────
-router.get("/settings", requireRole("company_admin", "platform_admin"), getWorkspaceSettings);
-router.patch("/settings", requireRole("company_admin", "platform_admin"), updateWorkspaceSettings);
+router.get("/settings", requireRole("company_admin"), getWorkspaceSettings);
+router.patch("/settings", requireRole("company_admin"), updateWorkspaceSettings);
 
 // ── Team / Invites ─────────────────────────────────────────────────────────
-router.post("/invites", requireRole("company_admin", "platform_admin"), inviteUser);
-router.get("/team", requireRole("company_admin", "company_viewer", "platform_admin"), listTeam);
-router.patch("/team/:userId", requireRole("company_admin", "platform_admin"), updateTeamMember);
+router.post("/invites", requireRole("company_admin"), inviteUser);
+router.get("/team", requireRole("company_admin", "company_viewer"), listTeam);
+router.patch("/team/:userId", requireRole("company_admin"), updateTeamMember);
 
 // ── Locations ──────────────────────────────────────────────────────────────
-router.get("/locations", requireRole("company_admin", "company_viewer", "platform_admin"), listLocations);
-router.post("/locations", requireRole("company_admin", "platform_admin"), createLocation);
-router.patch("/locations/:id", requireRole("company_admin", "platform_admin"), updateLocation);
-router.delete("/locations/:id", requireRole("company_admin", "platform_admin"), deleteLocation);
+router.get("/locations", requireRole("company_admin", "company_viewer"), listLocations);
+router.post("/locations", requireRole("company_admin"), createLocation);
+router.patch("/locations/:id", requireRole("company_admin"), updateLocation);
+router.delete("/locations/:id", requireRole("company_admin"), deleteLocation);
 
 // ── Channel Mapping Rules ──────────────────────────────────────────────────
-router.get("/channel-rules", requireRole("company_admin", "platform_admin"), listChannelMappingRules);
-router.post("/channel-rules", requireRole("company_admin", "platform_admin"), createChannelMappingRule);
-router.patch("/channel-rules/:id", requireRole("company_admin", "platform_admin"), updateChannelMappingRule);
-router.delete("/channel-rules/:id", requireRole("company_admin", "platform_admin"), deleteChannelMappingRule);
+router.get("/channel-rules", requireRole("company_admin"), listChannelMappingRules);
+router.post("/channel-rules", requireRole("company_admin"), createChannelMappingRule);
+router.patch("/channel-rules/:id", requireRole("company_admin"), updateChannelMappingRule);
+router.delete("/channel-rules/:id", requireRole("company_admin"), deleteChannelMappingRule);
 
 // ── Outbound Webhooks ──────────────────────────────────────────────────────
-router.get("/webhooks", requireRole("company_admin", "platform_admin"), listWebhookEndpoints);
-router.post("/webhooks", requireRole("company_admin", "platform_admin"), createWebhookEndpoint);
-router.patch("/webhooks/:id", requireRole("company_admin", "platform_admin"), updateWebhookEndpoint);
-router.delete("/webhooks/:id", requireRole("company_admin", "platform_admin"), deleteWebhookEndpoint);
+router.get("/webhooks", requireRole("company_admin"), listWebhookEndpoints);
+router.post("/webhooks", requireRole("company_admin"), createWebhookEndpoint);
+router.patch("/webhooks/:id", requireRole("company_admin"), updateWebhookEndpoint);
+router.delete("/webhooks/:id", requireRole("company_admin"), deleteWebhookEndpoint);
 
 // ── Audit Log ──────────────────────────────────────────────────────────────
-router.get("/audit-log", requireRole("company_admin", "platform_admin"), getAuditLog);
+router.get("/audit-log", requireRole("company_admin"), getAuditLog);
 
 // ── Connectors (company manages their integrations) ────────────────────────
 import {
@@ -102,7 +95,7 @@ import {
 } from "../controllers/gatewayConnectController.js";
 import { listSupportAccess } from "../controllers/supportAccessController.js";
 
-router.get("/connectors", requireRole("company_admin", "platform_admin"), listConnectors);
+router.get("/connectors", requireRole("company_admin"), listConnectors);
 
 // One-click payment-gateway connect (Stripe / PayPal / Razorpay). company_admin only: handles gateway credentials.
 // NOTE: static paths must be declared before "/connectors/:id".
@@ -117,33 +110,77 @@ router.get("/connectors/:id/events/:eventId", requireRole("company_admin"), getC
 
 // Who from platform support looked at this company's data, and why.
 router.get("/support-access", requireRole("company_admin"), listSupportAccess);
-router.post("/connectors", requireRole("company_admin", "platform_admin"), createConnector);
-router.patch("/connectors/:id", requireRole("company_admin", "platform_admin"), updateConnector);
-router.delete("/connectors/:id", requireRole("company_admin", "platform_admin"), deleteConnector);
-router.get("/connectors/:id/events", requireRole("company_admin", "platform_admin"), listConnectorEvents);
-router.post("/connectors/:id/events/:eventId/replay", requireRole("company_admin", "platform_admin"), replayEvent);
+router.post("/connectors", requireRole("company_admin"), createConnector);
+router.patch("/connectors/:id", requireRole("company_admin"), updateConnector);
+router.delete("/connectors/:id", requireRole("company_admin"), deleteConnector);
+router.get("/connectors/:id/events", requireRole("company_admin"), listConnectorEvents);
+router.post("/connectors/:id/events/:eventId/replay", requireRole("company_admin"), replayEvent);
 
-// ── Elysium Dashboard & Analytics (Cookie-Authenticated) ───────────────────
-router.get("/dashboard", requireRole("company_admin", "company_viewer", "platform_admin"), getDashboardOverview);
-router.get("/reports/dashboard", requireRole("company_admin", "company_viewer", "platform_admin"), getDashboardOverview);
-router.get("/reports/summary", requireRole("company_admin", "company_viewer", "platform_admin"), getSummaryReport);
-router.get("/reports/channels", requireRole("company_admin", "company_viewer", "platform_admin"), getChannelsReport);
-router.get("/reports/campaigns", requireRole("company_admin", "company_viewer", "platform_admin"), getCampaignsReport);
-router.get("/reports/locations", requireRole("company_admin", "company_viewer", "platform_admin"), getLocationsReport);
-router.get("/reports/trend", requireRole("company_admin", "company_viewer", "platform_admin"), getTrendReport);
-router.get("/reports/customers", requireRole("company_admin", "company_viewer", "platform_admin"), getCustomersReport);
+// ── Dashboard & reports (cookie session; every report also exists under /v1/reports/*) ─────
+const anyRole = requireRole("company_admin", "company_viewer");
+router.get("/dashboard", anyRole, reports.getDashboardOverview);
+router.get("/alerts", anyRole, reports.getAlerts);
+for (const [path, handler] of Object.entries({
+    dashboard: reports.getDashboardOverview,
+    summary: reports.getSummaryReport,
+    channels: reports.getChannelsReport,
+    campaigns: reports.getCampaignsReport,
+    locations: reports.getLocationsReport,
+    trend: reports.getTrendReport,
+    customers: reports.getCustomersReport,
+    cac: reports.getCacReport,
+    spend: reports.getSpendReport,
+    bookings: reports.getBookingsReport,
+    journeys: reports.getJourneysReport,
+    coverage: reports.getCoverageReport,
+    "data-quality": reports.getDataQualityReport,
+})) {
+    router.get(`/reports/${path}`, anyRole, handler);
+}
 
-// ── Customers & Journeys ───────────────────────────────────────────────────
+// ── Customers & journeys ───────────────────────────────────────────────────
 router.post("/customers/merge", requireRole("company_admin"), mergeCustomersHandler);
-router.get("/customers", requireRole("company_admin", "company_viewer", "platform_admin"), listCustomers);
-router.get("/customers/:id/journey", requireRole("company_admin", "company_viewer", "platform_admin"), getCustomerJourney);
+router.get("/customers", anyRole, listCustomers);
+router.get("/customers/:id/journey", anyRole, getCustomerJourney);
+router.get("/customers/:id/export", requireRole("company_admin"), tools.exportCustomerData);
+router.post("/customers/:id/erase", requireRole("company_admin"), tools.eraseCustomerData);
 
-// ── Transactions / Orders ──────────────────────────────────────────────────
-router.get("/transactions", requireRole("company_admin", "company_viewer", "platform_admin"), listOrders);
-router.get("/orders", requireRole("company_admin", "company_viewer", "platform_admin"), listOrders);
+// ── Transactions / orders / bookings ───────────────────────────────────────
+router.get("/transactions", anyRole, listOrders);
+router.get("/orders", anyRole, listOrders);
+router.get("/refunds", anyRole, listRefunds);
+router.get("/orders/:id/attribution", anyRole, getOrderAttribution);
+router.get("/upcoming", anyRole, listUpcomingBookings);
+router.get("/bookings", anyRole, listBookings);
 
-// ── Upcoming / Bookings ────────────────────────────────────────────────────
-router.get("/upcoming", requireRole("company_admin", "company_viewer", "platform_admin"), listUpcomingBookings);
-router.get("/bookings", requireRole("company_admin", "company_viewer", "platform_admin"), listBookings);
+// ── Onboarding, live feed, re-run tools ────────────────────────────────────
+router.get("/setup-checklist", anyRole, tools.getSetupChecklist);
+router.post("/test-events", requireRole("company_admin"), tools.postTestEvent);
+router.get("/events/live", anyRole, tools.getLiveFeed);
+router.post("/attribution/rerun", requireRole("company_admin"), tools.postRerunAttribution);
+router.post("/rollups/rebuild", requireRole("company_admin"), tools.postRebuildRollups);
+
+// ── Ad spend ───────────────────────────────────────────────────────────────
+router.get("/ad-accounts", requireRole("company_admin"), tools.listAdAccounts);
+router.post("/ad-accounts/oauth/:platform/start", requireRole("company_admin"), tools.startAdOAuth);
+router.patch("/ad-accounts/:id", requireRole("company_admin"), tools.updateAdAccount);
+router.delete("/ad-accounts/:id", requireRole("company_admin"), tools.deleteAdAccount);
+router.post("/ad-accounts/:id/sync", requireRole("company_admin"), tools.syncAdAccountNow);
+router.post("/ad-spend/upload", requireRole("company_admin"), tools.uploadAdSpend);
+router.get("/ad-spend", anyRole, tools.listAdSpend);
+
+// ── Outbound webhooks: delivery log, test, secret rotation ─────────────────
+router.get("/webhook-event-types", requireRole("company_admin"), tools.listWebhookEventTypes);
+router.get("/webhooks/:id/deliveries", requireRole("company_admin"), tools.listWebhookDeliveries);
+router.post("/webhooks/:id/test", requireRole("company_admin"), tools.testWebhook);
+router.post("/webhooks/:id/rotate-secret", requireRole("company_admin"), tools.rotateWebhookSecret);
+router.post("/webhooks/deliveries/:deliveryId/retry", requireRole("company_admin"), tools.retryWebhookDelivery);
+
+// ── Data: export ───────────────────────────────────────────────────────────
+router.get("/data/export", requireRole("company_admin"), tools.exportWorkspaceData);
+
+// Close the company account (company admin) / delete it (platform admin, audited purge).
+// Declared last so it never shadows a static path.
+router.delete("/:workspaceId", requireRole("company_admin", "platform_admin"), deleteWorkspace);
 
 export default router;

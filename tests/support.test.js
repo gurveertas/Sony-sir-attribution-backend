@@ -9,9 +9,12 @@ mock.module("../src/prisma/db.js", { namedExports: { db: fake.db }, defaultExpor
 const calls = [];
 const spy = (name) => async (req, res, wid) => { calls.push({ name, wid, maskPii: req.maskPii }); return res.status(200).json({ ok: name }); };
 mock.module("../controllers/reportsController.js", {
-    namedExports: Object.fromEntries(["getDashboardOverview", "getSummaryReport", "getCampaignsReport", "getChannelsReport", "getLocationsReport", "getTrendReport", "getCustomersReport"].map((n) => [n, spy(n)])),
+    namedExports: {
+        ...Object.fromEntries(["getDashboardOverview", "getSummaryReport", "getCampaignsReport", "getChannelsReport", "getLocationsReport", "getTrendReport", "getCustomersReport", "getCacReport", "getSpendReport", "getBookingsReport", "getJourneysReport", "getCoverageReport", "getDataQualityReport", "getAlerts"].map((n) => [n, spy(n)])),
+        resolveListWindow: async () => ({ fromIso: null, toIso: null }),
+    },
 });
-mock.module("../controllers/customerController.js", { namedExports: { listCustomers: spy("listCustomers") } });
+mock.module("../controllers/customerController.js", { namedExports: { listCustomers: spy("listCustomers"), getCustomerJourney: spy("getCustomerJourney") } });
 
 const support = await import("../controllers/supportAccessController.js");
 const view = await import("../controllers/platformAdminDashboardController.js");

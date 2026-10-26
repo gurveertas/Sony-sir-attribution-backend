@@ -1,11 +1,9 @@
-/**
- * Read-only aggregate data for the platform administrator dashboard.
- * Unlike company reports, these queries intentionally span workspaces and must remain admin-only.
- */
-
 import { db } from "../src/prisma/db.js";
-import { getDashboardOverview, getSummaryReport, getCampaignsReport, getChannelsReport, getLocationsReport, getTrendReport, getCustomersReport} from "./reportsController.js";
-import { listCustomers } from "./customerController.js";
+import * as reports from "./reportsController.js";
+import { listCustomers, getCustomerJourney } from "./customerController.js";
+import { listOrders, getOrderAttribution } from "./orderController.js";
+import { listRefunds } from "./refundController.js";
+import { listBookings, listUpcomingBookings } from "./bookingController.js";
 
 import { SupportAccessError, auditSupport, loadActiveSession, supportAccessRequired } from "../services/supportAccess.js";
 
@@ -44,6 +42,8 @@ const commonChecks = async (req, res) => {
     } else {
       req.maskPii = true;
     }
+    // From here on the handlers are the company's own, scoped to this workspace (read-only routes).
+    req.workspaceId = workspace.id;
     return workspace;
   } catch (error) {
     if (error instanceof SupportAccessError) {
@@ -56,125 +56,39 @@ const commonChecks = async (req, res) => {
   }
 };
 
-export const getWorkspaceDashboard = async (req, res) => {
+/**
+ * Wrap a company read handler for the platform-admin "view as" screens: support session + reason
+ * required, every request audited for the company, PII masked unless the session unmasked it.
+ */
+const view = (handler, label) => async (req, res) => {
   try {
     const workspace = await commonChecks(req, res);
     if (!workspace) return;
-    // const reason = String(req.query.reason ?? "").trim();
-    // if (reason.length < 5) {
-    //   return res.status(400).json({
-    //     message: "Provide a reason of at least 5 characters.",
-    //   });
-    // }
-
-    // await writeAudit(orm(), {
-    //   workspaceId: workspace.id,
-    //   actorType: "platform_admin",
-    //   actorUserId: req.user.id,
-    //   action: "admin.workspace_dashboard_viewed",
-    //   targetType: "workspace",
-    //   targetId: workspace.id,
-    //   reason,
-    //   ip: req.ip ?? null,
-    //   userAgent: req.headers["user-agent"] ?? null,
-    // });
-
-    return await getDashboardOverview(req, res, workspace.id);
+    return await handler(req, res, workspace.id);
   } catch (error) {
-    console.error("getWorkspaceDashboard:", error.message);
-    return res.status(500).json({
-      message: "Could not load workspace dashboard.",
-    });
+    console.error(`platform-admin view ${label}:`, error.message);
+    return res.status(500).json({ message: `Could not load ${label}.` });
   }
 };
 
-export const listCustomerView = async (req, res) => {
-  try {
-    const workspace = await commonChecks(req, res);
-    if (!workspace) return;
-    return await listCustomers(req, res, workspace.id);
-  } catch (error) {
-    console.error("getCustomerReport:", error.message);
-    return res.status(500).json({
-      message: "Could not load customer reports.",
-    });
-  }
-}
-
-export const getSummaryReportView = async (req, res) => {
-  try {
-    const workspace = await commonChecks(req, res);
-    if (!workspace) return;
-    return await getSummaryReport(req, res, workspace.id);
-  } catch (error) {
-    console.error("getSummaryReport:", error.message);
-    return res.status(500).json({
-      message: "Could not get summary report.",
-    });
-  }
-}
-
-export const getCampaignsReportView = async (req, res) => {
-  try {
-    const workspace = await commonChecks(req, res);
-    if (!workspace) return;
-    return await getCampaignsReport(req, res, workspace.id);
-  } catch (error) {
-    console.error("getCampaignsReport:", error.message);
-    return res.status(500).json({
-      message: "Could not get campaigns report.",
-    });
-  }
-}
-
-export const getChannelsReportView = async (req, res) => {
-  try {
-    const workspace = await commonChecks(req, res);
-    if (!workspace) return;
-    return await getChannelsReport(req, res, workspace.id);
-  } catch (error) {
-    console.error("getChannelsReport:", error.message);
-    return res.status(500).json({
-      message: "Could not get channels report.",
-    });
-  }
-}
-
-export const getTrendReportView = async (req, res) => {
-  try {
-    const workspace = await commonChecks(req, res);
-    if (!workspace) return;
-    return await getTrendReport(req, res, workspace.id);
-  } catch (error) {
-    console.error("getTrendReport:", error.message);
-    return res.status(500).json({
-      message: "Could not get trend report.",
-    });
-  }
-}
-
-export const getLocationsReportView = async (req, res) => {
-  try {
-    const workspace = await commonChecks(req, res);
-    if (!workspace) return;
-    return await getLocationsReport(req, res, workspace.id);
-  } catch (error) {
-    console.error("getLocationReport:", error.message);
-    return res.status(500).json({
-      message: "Could not get location report.",
-    });
-  }
-}
-
-export const getCustomerReportView = async (req, res) => {
-  try {
-    const workspace = await commonChecks(req, res);
-    if (!workspace) return;
-    return await getCustomersReport(req, res, workspace.id);
-  } catch (error) {
-    console.error("getCustomersReport:", error.message);
-    return res.status(500).json({
-      message: "Could not get customers report.",
-    });
-  }
-}
+export const getWorkspaceDashboard = view(reports.getDashboardOverview, "workspace dashboard");
+export const listCustomerView = view(listCustomers, "customers");
+export const getCustomerJourneyView = view(getCustomerJourney, "customer journey");
+export const getSummaryReportView = view(reports.getSummaryReport, "summary report");
+export const getCampaignsReportView = view(reports.getCampaignsReport, "campaigns report");
+export const getChannelsReportView = view(reports.getChannelsReport, "channels report");
+export const getTrendReportView = view(reports.getTrendReport, "trend report");
+export const getLocationsReportView = view(reports.getLocationsReport, "locations report");
+export const getCustomerReportView = view(reports.getCustomersReport, "customers report");
+export const getCacReportView = view(reports.getCacReport, "CAC report");
+export const getSpendReportView = view(reports.getSpendReport, "spend report");
+export const getBookingsReportView = view(reports.getBookingsReport, "bookings report");
+export const getJourneysReportView = view(reports.getJourneysReport, "journeys report");
+export const getCoverageReportView = view(reports.getCoverageReport, "coverage report");
+export const getDataQualityReportView = view(reports.getDataQualityReport, "data quality report");
+export const getAlertsView = view(reports.getAlerts, "alerts");
+export const listTransactionsView = view(listOrders, "transactions");
+export const listRefundsView = view(listRefunds, "refunds");
+export const getOrderAttributionView = view(getOrderAttribution, "order attribution");
+export const listBookingsView = view(listBookings, "bookings");
+export const listUpcomingView = view(listUpcomingBookings, "upcoming bookings");

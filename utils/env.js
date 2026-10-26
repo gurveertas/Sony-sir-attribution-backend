@@ -17,9 +17,8 @@ if (!process.env.RESEND_API_KEY) {
     console.error("resend api missing from env");
     throw new Error("resend api missing from env");
 }
-if (!process.env.PORT) {
-    console.error("from email missing from env");
-    throw new Error("from email missing from env");
+if (!process.env.EMAIL_FROM) {
+    console.warn("[config] EMAIL_FROM is not set: outgoing emails may be rejected.");
 }
 if (!process.env.NODE_ENV) {
     console.error("node env missing from env");
@@ -50,3 +49,23 @@ if (ENV.NODE_ENV === "production") {
 }
 
 export default ENV;
+// Optional extras (all have safe defaults):
+//   IDENTITY_HASH_KEY   secret for keyed (HMAC) hashing of emails/phones; strongly recommended.
+//   FRONTEND_URL        base URL of the dashboard, used in emails (verification, invites, resets).
+//   REQUIRE_WORKSPACE_APPROVAL=true  new companies wait in "pending" until a platform admin approves.
+//   META_APP_ID / META_APP_SECRET, GOOGLE_ADS_CLIENT_ID / GOOGLE_ADS_CLIENT_SECRET / GOOGLE_ADS_DEVELOPER_TOKEN
+//                       enable the ad-spend OAuth connections.
+//   DISABLE_BACKGROUND_WORKERS=true  do not start the event queue / scheduler in this process.
+ENV.IDENTITY_HASH_KEY = process.env.IDENTITY_HASH_KEY || null;
+ENV.FRONTEND_URL = (process.env.FRONTEND_URL || "https://asftas.vercel.app").replace(/\/+$/, "");
+ENV.REQUIRE_WORKSPACE_APPROVAL = String(process.env.REQUIRE_WORKSPACE_APPROVAL ?? "false").toLowerCase() === "true";
+ENV.META_APP_ID = process.env.META_APP_ID || null;
+ENV.META_APP_SECRET = process.env.META_APP_SECRET || null;
+ENV.GOOGLE_ADS_CLIENT_ID = process.env.GOOGLE_ADS_CLIENT_ID || null;
+ENV.GOOGLE_ADS_CLIENT_SECRET = process.env.GOOGLE_ADS_CLIENT_SECRET || null;
+ENV.GOOGLE_ADS_DEVELOPER_TOKEN = process.env.GOOGLE_ADS_DEVELOPER_TOKEN || null;
+ENV.DISABLE_BACKGROUND_WORKERS = String(process.env.DISABLE_BACKGROUND_WORKERS ?? "false").toLowerCase() === "true";
+
+if (ENV.NODE_ENV === "production" && !ENV.IDENTITY_HASH_KEY) {
+    console.warn("[config] IDENTITY_HASH_KEY is not set: emails/phones are hashed with plain SHA-256, which is easy to brute-force for phone numbers. Set a dedicated secret.");
+}

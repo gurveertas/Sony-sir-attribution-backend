@@ -21,6 +21,7 @@ mock.module("../services/connectorProcessors.js", {
 });
 
 const mgmt = await import("../controllers/connectorManagementController.js");
+const { drainJobs } = await import("../services/jobs.js");
 const hooks = await import("../controllers/connectorController.js");
 const { prepareConnectorConfig } = await import("../utils/connectorConfig.js");
 
@@ -30,7 +31,12 @@ const reset = () => {
     processorBehaviour = async () => ({ order: { id: "o1" } });
     fake.tables.Workspace = [{ id: "ws1", status: "active" }];
 };
-const tick = () => new Promise((r) => setImmediate(r));
+// webhooks are acknowledged first and processed by the background queue: wait for it
+const tick = async () => {
+    await new Promise((r) => setImmediate(r));
+    await drainJobs();
+    await new Promise((r) => setImmediate(r));
+};
 
 async function seedConnector(type = "razorpay", extra = {}) {
     const row = await fake.db.orm.public.Connector.create({
@@ -175,17 +181,20 @@ test("stripe webhook: bad signature -> 400, nothing stored", async () => {
     assert.equal(processorCalls.length, 0);
 });
 
-test("stripe webhook: processing failure -> 500, raw event kept as failed (replayable), connector failing with error count", async () => {
+test("stripe webhook: processing failure -> still acknowledged (stored first), event failed with a retry scheduled, connector failing", async () => {
     reset();
     processorBehaviour = async () => { throw new Error("db down"); };
     const c = await seedConnector("stripe");
     const body = JSON.stringify({ id: "evt_2", type: "payment_intent.succeeded", data: { object: {} } });
     const res = makeRes();
     await hooks.stripeWebhook(webhookReq(c.id, body, { "stripe-signature": stripeSigned(body, "whsec") }), res);
-    assert.equal(res.statusCode, 500);
+    assert.equal(res.statusCode, 200, "the gateway is acknowledged once the raw event is stored (4.12)");
+    assert.ok(res.body.eventId);
     await tick();
     assert.equal(fake.tables.RawEvent[0].status, "failed");
     assert.equal(fake.tables.RawEvent[0].error, "db down");
+    assert.ok(fake.tables.RawEvent[0].nextAttemptAt, "a retry is scheduled with backoff");
+    assert.equal(fake.tables.RawEvent[0].attempts, 1);
     assert.deepEqual([fake.tables.Connector[0].status, fake.tables.Connector[0].errorCount, fake.tables.Connector[0].lastError], ["failing", 1, "db down"]);
 });
 

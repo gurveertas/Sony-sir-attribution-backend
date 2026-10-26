@@ -9,6 +9,7 @@
  * processing the same event twice never double-counts.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { getConnectorConfig, getNestedValue, ingestMappedOrder } from "../utils/connectorConfig.js";
 
 // ── controller bridge ────────────────────────────────────────────────────────
@@ -34,8 +35,22 @@ function assertSucceeded(response, operation) {
     }
 }
 
+// The connector, not the payload, decides which connector an event belongs to (req.connector), and the
+// time the raw event was received anchors defaults (booking time, refund date) so replays are identical.
+const contextStore = new AsyncLocalStorage();
+const currentCtx = () => contextStore.getStore() ?? null;
+
 async function invoke(fn, workspaceId, body, label, { withApiKey = true } = {}) {
-    const req = { workspaceId, body, ip: null, headers: {}, ...(withApiKey ? { apiKey: {} } : {}) };
+    const req = {
+        workspaceId,
+        body,
+        ip: null,
+        headers: {},
+        connector: currentCtx()?.connector ? { id: currentCtx().connector.id, type: currentCtx().connector.type } : null,
+        receivedAt: currentCtx()?.receivedAt ?? null,
+        isTest: Boolean(currentCtx()?.isTest),
+        ...(withApiKey ? { apiKey: {} } : {}),
+    };
     const res = captureResponse();
     await fn(req, res);
     assertSucceeded(res, label);
@@ -47,6 +62,20 @@ async function resolveDeps(overrides = {}) {
     if (!deps.createOrder) deps.createOrder = (await import("../controllers/orderController.js")).createOrder;
     if (!deps.createRefund) deps.createRefund = (await import("../controllers/refundController.js")).createRefund;
     if (!deps.createBooking) deps.createBooking = (await import("../controllers/bookingController.js")).createBooking;
+    if (!deps.updateBookingByExternalId) {
+        deps.updateBookingByExternalId = async (workspaceId, externalId, body, ctx) =>
+            (await import("./ingestion.js")).updateBookingByExternalId(workspaceId, externalId, body, ctx);
+    }
+    if (!deps.resolveGuest) {
+        deps.resolveGuest = async (workspaceId, identifiers) => {
+            const [{ db }, { resolveCustomer }] = await Promise.all([import("../src/prisma/db.js"), import("./identityService.js")]);
+            const { customer, isNew } = await resolveCustomer(db, workspaceId, identifiers);
+            return { customerId: customer?.id ?? null, isNew };
+        };
+    }
+    if (!deps.mergeCustomers) {
+        deps.mergeCustomers = async (workspaceId, body) => (await import("../controllers/customerController.js")).mergeFromSource(workspaceId, body);
+    }
     if (!deps.findOrder) {
         const { db } = await import("../src/prisma/db.js");
         deps.findOrder = (workspaceId, externalId) => db.orm.public.Order.where({ workspaceId, externalId }).first();
@@ -310,6 +339,13 @@ async function processShopify({ connector, eventType: topic, payload, deps }) {
         const checkoutToken =
             attributes.find((a) => ["attribution_token", "checkout_token"].includes(a.name))?.value || null;
 
+        // Section 6: gross = before discounts, excluding tax; net = gross - discounts.
+        // subtotal_price is after discounts and before shipping/tax (tax-inclusive shops include tax).
+        const discount = parseFloat(order.total_discounts || 0);
+        const tax = parseFloat(order.total_tax || 0);
+        let subtotal = parseFloat(order.subtotal_price ?? order.total_price ?? 0);
+        if (order.taxes_included) subtotal -= tax;
+        const net = Math.max(0, Math.round(subtotal * 100) / 100);
         result.order = await invoke(
             deps.createOrder,
             workspaceId,
@@ -317,10 +353,12 @@ async function processShopify({ connector, eventType: topic, payload, deps }) {
                 externalId: String(order.id),
                 orderedAt: order.processed_at || order.created_at,
                 currency: order.currency,
-                grossAmount: parseFloat(order.total_price || 0),
-                netAmount: parseFloat(order.subtotal_price || order.total_price || 0),
-                discountAmount: parseFloat(order.total_discounts || 0),
-                taxAmount: parseFloat(order.total_tax || 0),
+                grossAmount: Math.round((net + discount) * 100) / 100,
+                netAmount: net,
+                discountAmount: discount,
+                taxAmount: tax,
+                customerExternalId: order.customer?.id ? String(order.customer.id) : null,
+                customerExternalIdKey: "shopify",
                 checkoutToken,
                 email: order.email || order.customer?.email || null,
                 phone: order.phone || order.billing_address?.phone || null,
@@ -356,56 +394,186 @@ async function processShopify({ connector, eventType: topic, payload, deps }) {
 }
 
 // ── Zenoti ───────────────────────────────────────────────────────────────────
+// Repackages the guest, appointment and invoice handlers. Event names are matched loosely because
+// Zenoti tenants use both "appointment.created" and "AppointmentGroup.Created" style names.
+
+const ZENOTI_STATUS = {
+    "-2": "no_show", "-1": "cancelled", 0: "scheduled", 1: "completed", 2: "confirmed", 4: "confirmed",
+    new: "scheduled", booked: "scheduled", open: "scheduled", confirmed: "confirmed", confirm: "confirmed",
+    checkin: "confirmed", "checked_in": "confirmed", closed: "completed", completed: "completed",
+    cancelled: "cancelled", canceled: "cancelled", deleted: "cancelled", noshow: "no_show", "no_show": "no_show",
+};
+
+const zenotiToken = (...texts) => {
+    for (const t of texts) {
+        const m = String(t ?? "").match(/(?:attribution_token|checkout_token|wtok)[:=]\s*([A-Za-z0-9-]{3,64})/);
+        if (m) return m[1];
+    }
+    return null;
+};
+
+function zenotiKind(type) {
+    const t = String(type || "").toLowerCase().replace(/appointmentgroup/, "appointment").replace(/[\s_-]/g, "");
+    if (/^guest\.merged?$/.test(t)) return "guest_merged";
+    if (/^guest\./.test(t)) return "guest";
+    if (/^invoice\.(completed|paid|closed)$/.test(t)) return "invoice";
+    if (/^invoice\.(refunded|refund)$/.test(t)) return "invoice_refund";
+    if (/^appointment\.(created|booked)$/.test(t)) return "appointment_created";
+    if (/^appointment\.(cancelled|canceled|deleted)$/.test(t)) return "appointment_cancelled";
+    if (/^appointment\.(noshow)$/.test(t)) return "appointment_no_show";
+    if (/^appointment\.(updated|rescheduled|confirmed|checkin|checkedin|completed|closed)$/.test(t)) return "appointment_updated";
+    return null;
+}
 
 async function processZenoti({ connector, eventType, payload, deps }) {
     const workspaceId = connector.workspaceId;
     const connectorId = connector.id;
     const type = eventType || payload?.event_type || payload?.type || "unknown";
+    const currency = connector.config?.currency || payload?.currency || "USD";
+    const kind = zenotiKind(type);
     const result = {};
 
-    if (type === "appointment.created" || type === "appointment.booked") {
+    if (kind === "guest_merged") {
+        // Zenoti merged two guest profiles: combine their history here too
+        const from = payload.source_guest_id ?? payload.merged_guest_id ?? payload.guest?.merged_from;
+        const into = payload.target_guest_id ?? payload.primary_guest_id ?? payload.guest?.id;
+        if (!from || !into) throw new Error("Zenoti guest merge event needs the two guest ids");
+        result.merge = await deps.mergeCustomers(workspaceId, { sourceExternalId: String(from), targetExternalId: String(into), externalIdKey: "zenoti" });
+        return result;
+    }
+
+    if (kind === "guest") {
+        const guest = payload.guest || payload;
+        const email = guest.email || guest.personal_info?.email || null;
+        const phone = guest.mobile || guest.phone || guest.personal_info?.mobile_phone?.number || null;
+        if (guest.id || email || phone) {
+            result.guest = await deps.resolveGuest(workspaceId, { email, phone, externalId: guest.id ? String(guest.id) : null, externalIdKey: "zenoti" });
+        }
+        return result;
+    }
+
+    if (kind?.startsWith("appointment")) {
         const appt = payload.appointment || payload;
         const guest = appt.guest || {};
-        const checkoutToken = appt.notes?.match(/attribution_token:([a-f0-9-]+)/)?.[1] || null;
+        const externalId = String(appt.id || appt.appointment_id || appt.appointment_group_id || "");
+        if (!externalId) throw new Error("Zenoti appointment event has no appointment id");
+        const rawStatus = appt.status ?? appt.appointment_status;
+        const mapped = ZENOTI_STATUS[String(rawStatus).toLowerCase()] ?? ZENOTI_STATUS[rawStatus] ?? null;
 
-        result.booking = await invoke(
-            deps.createBooking,
+        if (kind === "appointment_created") {
+            result.booking = await invoke(
+                deps.createBooking,
+                workspaceId,
+                {
+                    externalId,
+                    appointmentStartAt: appt.start_time || appt.appointment_date || appt.start_date,
+                    appointmentEndAt: appt.end_time || null,
+                    bookedAt: appt.created_date || appt.booked_on || undefined,
+                    currency,
+                    bookedValue: parseFloat(appt.price?.sales ?? appt.price ?? appt.total ?? 0),
+                    status: mapped && mapped !== "completed" ? mapped : undefined,
+                    checkoutToken: zenotiToken(appt.notes, appt.booking_notes, appt.utm_content, appt.utm_campaign),
+                    email: guest.email || null,
+                    phone: guest.mobile || guest.phone || null,
+                    customerExternalId: guest.id ? String(guest.id) : null,
+                    customerExternalIdKey: "zenoti",
+                    serviceName: appt.service?.name || appt.service_name || null,
+                    locationExternalId: appt.center_id || appt.center?.id || null,
+                    gclid: appt.gclid || null,
+                    fbclid: appt.fbclid || null,
+                    connectorId,
+                },
+                "Zenoti booking ingestion",
+            );
+            return result;
+        }
+
+        const status =
+            kind === "appointment_cancelled" ? "cancelled" : kind === "appointment_no_show" ? "no_show" : mapped ?? undefined;
+        result.booking = await deps.updateBookingByExternalId(
             workspaceId,
+            externalId,
             {
-                externalId: String(appt.id || appt.appointment_id),
-                appointmentStartAt: appt.start_time || appt.appointment_date,
-                currency: connector.config?.currency || "USD",
-                bookedValue: parseFloat(appt.price || appt.total || 0),
-                checkoutToken,
-                email: guest.email || null,
-                phone: guest.mobile || guest.phone || null,
-                serviceName: appt.service?.name || appt.service_name || null,
-                connectorId,
+                status,
+                appointmentStartAt: appt.start_time || appt.appointment_date || undefined,
+                bookedValue: appt.price?.sales ?? appt.price ?? undefined,
+                reason: appt.cancellation_reason || appt.reason || null,
             },
-            "Zenoti booking ingestion",
+            { connectorId, receivedAt: currentCtx()?.receivedAt ?? null },
         );
-    } else if (type === "invoice.completed" || type === "invoice.paid") {
+        return result;
+    }
+
+    if (kind === "invoice") {
         const invoice = payload.invoice || payload;
         const guest = invoice.guest || {};
+        const tax = parseFloat(invoice.tax ?? invoice.total_tax ?? 0);
+        const discount = parseFloat(invoice.discount ?? invoice.total_discount ?? 0);
+        const total = parseFloat(invoice.total ?? invoice.total_price ?? 0);
+        // revenue excludes tax: sub_total when Zenoti sends it, otherwise total - tax
+        const net = invoice.sub_total !== undefined ? parseFloat(invoice.sub_total) : Math.max(0, total - tax);
+        const appointmentId =
+            invoice.appointment_id || invoice.appointment_group_id || invoice.appointments?.[0]?.appointment_id ||
+            (invoice.items || invoice.invoice_items || []).find((i) => i.appointment_id)?.appointment_id || null;
 
         result.order = await invoke(
             deps.createOrder,
             workspaceId,
             {
                 externalId: String(invoice.id || invoice.invoice_id),
-                orderedAt: invoice.payment_date || invoice.date || new Date().toISOString(),
-                currency: connector.config?.currency || "USD",
-                grossAmount: parseFloat(invoice.total || 0),
-                netAmount: parseFloat(invoice.sub_total || invoice.total || 0),
-                discountAmount: parseFloat(invoice.discount || 0),
-                taxAmount: parseFloat(invoice.tax || 0),
+                orderedAt: invoice.payment_date || invoice.closed_date || invoice.date || currentCtx()?.receivedAt || new Date().toISOString(),
+                currency,
+                grossAmount: Math.round((net + discount) * 100) / 100,
+                netAmount: net,
+                discountAmount: discount,
+                taxAmount: tax,
+                bookingExternalId: appointmentId ? String(appointmentId) : null,
+                checkoutToken: zenotiToken(invoice.notes),
                 email: guest.email || null,
                 phone: guest.mobile || guest.phone || null,
+                customerExternalId: guest.id ? String(guest.id) : null,
+                customerExternalIdKey: "zenoti",
+                locationExternalId: invoice.center_id || invoice.center?.id || null,
+                items: (invoice.items || invoice.invoice_items || []).map((it) => ({
+                    name: it.name || it.item_name || "Service",
+                    quantity: it.quantity || 1,
+                    unitAmount: parseFloat(it.price ?? it.final_price ?? 0),
+                })),
                 connectorId,
             },
             "Zenoti order ingestion",
         );
+        // the visit happened: a paid invoice completes its booking
+        if (appointmentId) {
+            try {
+                await deps.updateBookingByExternalId(workspaceId, String(appointmentId), { status: "completed" }, { connectorId, receivedAt: currentCtx()?.receivedAt ?? null });
+            } catch {
+                /* invoice without a known booking is fine */
+            }
+        }
+        return result;
     }
+
+    if (kind === "invoice_refund") {
+        const refund = payload.refund || payload;
+        result.refund = await invoke(
+            deps.createRefund,
+            workspaceId,
+            {
+                externalOrderId: String(refund.invoice_id || refund.id),
+                amount: parseFloat(refund.amount ?? refund.refund_amount ?? 0),
+                currency,
+                externalId: refund.refund_id ? String(refund.refund_id) : `${refund.invoice_id || refund.id}:refund:${refund.amount ?? refund.refund_amount}`,
+                refundedAt: refund.refund_date || refund.date || undefined,
+                reason: refund.reason ?? null,
+            },
+            "Zenoti refund ingestion",
+            { withApiKey: false },
+        );
+        return result;
+    }
+
+    result.note = "Unknown event type, stored for replay";
     return result;
 }
 
@@ -420,6 +588,8 @@ async function processGeneric({ connector, eventType, payload, config, deps }) {
 
     const isOrderEvent = (config.orderEventTypes || ["order.paid", "payment.completed"]).includes(resolved);
     const isBookingEvent = (config.bookingEventTypes || ["booking.created"]).includes(resolved);
+    const isBookingUpdate = (config.bookingUpdateEventTypes || ["booking.updated", "booking.cancelled"]).includes(resolved);
+    const isRefundEvent = (config.refundEventTypes || ["order.refunded", "refund.created"]).includes(resolved);
 
     if (isOrderEvent) {
         result.order = await ingestMappedOrder({
@@ -443,9 +613,40 @@ async function processGeneric({ connector, eventType, payload, config, deps }) {
                 phone: getNestedValue(payload, fieldMap.phone) || null,
                 checkoutToken: getNestedValue(payload, fieldMap.checkoutToken) || null,
                 serviceName: getNestedValue(payload, fieldMap.serviceName) || null,
+                bookedAt: getNestedValue(payload, fieldMap.bookedAt) || undefined,
+                visitorId: getNestedValue(payload, fieldMap.visitorId) || null,
+                locationExternalId: getNestedValue(payload, fieldMap.locationExternalId) || null,
                 connectorId,
             },
             "Generic booking ingestion",
+        );
+    } else if (isBookingUpdate) {
+        const externalId = String(getNestedValue(payload, fieldMap.externalId) || "");
+        if (!externalId) throw new Error("Mapped booking externalId is missing");
+        result.booking = await deps.updateBookingByExternalId(
+            workspaceId,
+            externalId,
+            {
+                status: resolved.endsWith("cancelled") ? "cancelled" : getNestedValue(payload, fieldMap.status) || undefined,
+                appointmentStartAt: getNestedValue(payload, fieldMap.appointmentStartAt) || undefined,
+                bookedValue: getNestedValue(payload, fieldMap.bookedValue) ?? undefined,
+            },
+            { connectorId, receivedAt: currentCtx()?.receivedAt ?? null },
+        );
+    } else if (isRefundEvent) {
+        const refundMap = { externalOrderId: "order_id", amount: "amount", currency: "currency", externalId: "id", refundedAt: "created_at", ...(config.refundFieldMap || {}) };
+        result.refund = await invoke(
+            deps.createRefund,
+            workspaceId,
+            {
+                externalOrderId: String(getNestedValue(payload, refundMap.externalOrderId) ?? ""),
+                amount: Number(getNestedValue(payload, refundMap.amount)),
+                currency: String(getNestedValue(payload, refundMap.currency) || "USD").toUpperCase(),
+                externalId: getNestedValue(payload, refundMap.externalId) ? String(getNestedValue(payload, refundMap.externalId)) : null,
+                refundedAt: getNestedValue(payload, refundMap.refundedAt) || undefined,
+            },
+            "Generic refund ingestion",
+            { withApiKey: false },
         );
     } else {
         result.note = "Unknown event type, stored for replay";
@@ -472,10 +673,13 @@ export const isReplayable = (connectorType) => connectorType in PROCESSORS;
  * @param {{connector: object, eventType?: string, payload: object, deps?: object}} args
  * @returns {Promise<{order?: object, refund?: object, booking?: object, note?: string}>}
  */
-export async function processConnectorEvent({ connector, eventType, payload, deps }) {
+export async function processConnectorEvent({ connector, eventType, payload, deps, receivedAt = null, isTest = false }) {
     const processor = PROCESSORS[connector.type];
     if (!processor) throw new Error(`No event processor for connector type "${connector.type}"`);
     const resolvedDeps = await resolveDeps(deps);
     const config = getConnectorConfig(connector);
-    return processor({ connector, eventType, payload, config, deps: resolvedDeps });
+    // AsyncLocalStorage keeps the context per event even when events of several companies interleave.
+    return contextStore.run({ connector, receivedAt, isTest }, () =>
+        processor({ connector, eventType, payload, config, deps: resolvedDeps }),
+    );
 }

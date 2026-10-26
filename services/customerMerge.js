@@ -95,8 +95,8 @@ export async function mergeCustomers(db, { workspaceId, sourceId, targetId, acto
 
         await writeAudit(orm, {
             workspaceId,
-            actorType: "user",
-            actorUserId,
+            actorType: actorUserId ? "user" : "api_key",
+            actorUserId: actorUserId ?? null,
             action: "customer.merged",
             targetType: "customer",
             targetId: target.id,

@@ -1,238 +1,227 @@
 /**
- * Browser tracking endpoints: record touches, identify visitors, and freeze checkout sessions.
- * The API-key middleware supplies the workspace; visitor-supplied workspace IDs must never be trusted.
- * Checkout sessions snapshot touches so later visits cannot change an already-started conversion's context.
+ * SDK tracking endpoints (publishable key, browser) — DFD processes 2.0 (touches) and 3.0 (tokens).
+ *
+ *   POST /v1/touches            one visit with its source
+ *   POST /v1/identify           link the visitor to an email / phone
+ *   POST /v1/checkout-sessions  freeze the visitor's touches, return the checkout token
+ *
+ * Consent (scope 4.2 / 4.10): with consentMode "opt_in" nothing is stored unless the SDK says
+ * consent was granted; with "opt_out" nothing is stored once the visitor refused.
  */
+
+import crypto from "crypto";
+import { db } from "../src/prisma/db.js";
+import { tenantDb } from "../services/tenantDb.js";
+import { classifyChannel, isInternalReferrer, hasClickId } from "../services/attributionEngine.js";
+import { resolveCustomer, linkVisitorToCustomer, ensureVisitor } from "../services/identityService.js";
+import { sendError } from "../services/http.js";
+
+const SAME_TOUCH_MS = 30 * 60 * 1000;
+const RULES_TTL_MS = 60_000;
+const rulesCache = new Map(); // workspaceId -> { at, rules, consentMode }
+
+const clip = (v, max = 2000) => (v === undefined || v === null || v === "" ? null : String(v).slice(0, max));
+
+async function trackingContext(workspaceId) {
+    const hit = rulesCache.get(workspaceId);
+    if (hit && Date.now() - hit.at < RULES_TTL_MS) return hit;
+    const [workspace, rules] = await Promise.all([
+        db.orm.public.Workspace.where({ id: workspaceId }).first(),
+        db.orm.public.ChannelMappingRule.where({ workspaceId }).all(),
+    ]);
+    const entry = { at: Date.now(), rules: rules.filter((r) => r.isActive !== false), consentMode: workspace?.consentMode ?? "off" };
+    rulesCache.set(workspaceId, entry);
+    return entry;
+}
+
+/** Drop cached rules after a settings / channel-rule change. */
+export const invalidateTrackingCache = (workspaceId) => rulesCache.delete(workspaceId);
+
+/** @returns {string|null} why tracking must not store anything */
+function consentBlock(consentMode, consent) {
+    if (consentMode === "opt_in" && consent !== true && consent !== "granted") return "consent_required";
+    if (consentMode === "opt_out" && (consent === false || consent === "denied")) return "consent_denied";
+    return null;
+}
+
+function validVisitorId(v) {
+    return typeof v === "string" && v.length > 0 && v.length <= 200;
+}
 
 /**
  * POST /v1/touches
- *
- * Records a visitor touch (page view with attribution data).
- * Called by the site SDK on every page visit.
- *
- * Auth: publishable API key (apiKeyAuth middleware sets req.workspaceId, req.apiKey)
- *
- * Body:
- *   visitorId*    - client-side UUID for this browser/device
- *   touchedAt?    - ISO timestamp (defaults to now)
- *   source?       - utm_source
- *   medium?       - utm_medium
- *   campaign?     - utm_campaign
- *   term?         - utm_term
- *   content?      - utm_content
- *   referrer?     - document.referrer
- *   landingPage?  - window.location.href
- *   pageTitle?    - document.title
- *   gclid?        - Google click ID
- *   fbclid?       - Facebook click ID
- *   ttclid?       - TikTok click ID
- *   msclkid?      - Bing click ID
- *   fbc?          - Facebook browser cookie
- *   fbp?          - Facebook pixel cookie
- *   ga?           - GA cookie
+ * Body: visitorId*, touchedAt?, source, medium, campaign, term, content (UTMs), referrer, landingPage,
+ *       pageTitle, gclid, fbclid, ttclid, msclkid, fbc, fbp, ga, consent?
  */
-
-import { db } from "../src/prisma/db.js";
-import { classifyChannel } from "../services/attributionEngine.js";
-
 export const recordTouch = async (req, res) => {
     try {
         const workspaceId = req.workspaceId;
-        const siteId = req.apiKey?.siteId ?? null;
-
-        const {
-            visitorId,
-            touchedAt,
-            source,
-            medium,
-            campaign,
-            term,
-            content,
-            referrer,
-            landingPage,
-            pageTitle,
-            gclid,
-            fbclid,
-            ttclid,
-            msclkid,
-            fbc,
-            fbp,
-            ga,
-        } = req.body ?? {};
-
-        if (!visitorId || typeof visitorId !== "string" || visitorId.length > 200) {
-            return res.status(400).json({ message: "visitorId is required (max 200 chars)" });
+        const t = tenantDb(db, workspaceId);
+        const b = req.body ?? {};
+        if (!validVisitorId(b.visitorId)) return res.status(400).json({ message: "visitorId is required (max 200 chars)", code: "validation_error" });
+        if (b.touchedAt !== undefined && !Number.isFinite(Date.parse(b.touchedAt))) {
+            return res.status(400).json({ message: "touchedAt must be an ISO timestamp", code: "validation_error" });
         }
 
-        // Upsert visitor record
-        const existingVisitor = await db.orm.public.Visitor.where({ workspaceId, visitorId }).first();
-        let visitor;
-        if (existingVisitor) {
-            visitor = existingVisitor;
-            await db.orm.public.Visitor.where({ id: visitor.id }).update({ lastSeenAt: new Date().toISOString() });
-        } else {
-            visitor = await db.orm.public.Visitor.create({
-                workspaceId,
-                visitorId,
-            });
-        }
+        const { rules, consentMode } = await trackingContext(workspaceId);
+        const blocked = consentBlock(consentMode, b.consent);
+        if (blocked) return res.status(202).json({ stored: false, reason: blocked });
 
-        // Build the touch data
         const touchData = {
-            workspaceId,
-            visitorId: visitor.id,
-            siteId: siteId ?? null,
-            source: source ?? null,
-            medium: medium ?? null,
-            campaign: campaign ?? null,
-            term: term ?? null,
-            content: content ?? null,
-            referrer: referrer ?? null,
-            landingPage: landingPage ?? null,
-            pageTitle: pageTitle ?? null,
-            gclid: gclid ?? null,
-            fbclid: fbclid ?? null,
-            ttclid: ttclid ?? null,
-            msclkid: msclkid ?? null,
-            fbc: fbc ?? null,
-            fbp: fbp ?? null,
-            ga: ga ?? null,
-            ip: req.ip ?? null,
-            userAgent: req.headers["user-agent"] ?? null,
-            touchedAt: touchedAt ? new Date(touchedAt).toISOString() : new Date().toISOString(),
+            siteId: req.apiKey?.siteId ?? null,
+            source: clip(b.source, 300),
+            medium: clip(b.medium, 300),
+            campaign: clip(b.campaign, 300),
+            term: clip(b.term, 300),
+            content: clip(b.content, 300),
+            referrer: clip(b.referrer),
+            landingPage: clip(b.landingPage),
+            pageTitle: clip(b.pageTitle, 500),
+            gclid: clip(b.gclid, 500),
+            fbclid: clip(b.fbclid, 500),
+            ttclid: clip(b.ttclid, 500),
+            msclkid: clip(b.msclkid, 500),
+            fbc: clip(b.fbc, 500),
+            fbp: clip(b.fbp, 500),
+            ga: clip(b.ga, 500),
+            ip: null, // not stored: personal data, not needed for deterministic matching
+            userAgent: clip(req.headers["user-agent"], 500),
+            isTest: req.apiKey?.mode === "test",
+            touchedAt: new Date(b.touchedAt ?? Date.now()).toISOString(),
         };
 
-        // Classify channel using UTMs / click IDs
-        touchData.channel = classifyChannel(touchData, []);
-        const DEDUPE_MS = 30 * 60 * 1000;
-        const latest = await db.orm.public.Touch
-            .where({ workspaceId, visitorId: visitor.id })
-            .first();
+        // A click on an internal link (same-site referrer, no campaign data) is not a new touch.
+        const hasCampaign = touchData.source || touchData.medium || touchData.campaign || hasClickId(touchData);
+        if (!hasCampaign && touchData.referrer && isInternalReferrer(touchData)) {
+            return res.status(200).json({ stored: false, reason: "internal_navigation", visitorId: b.visitorId });
+        }
 
-        const sameCampaign =
+        const visitor = await ensureVisitor(db, workspaceId, b.visitorId);
+        await t.Visitor.where({ id: visitor.id }).update({ lastSeenAt: new Date().toISOString() });
+        touchData.visitorId = visitor.id;
+        touchData.channel = classifyChannel(touchData, rules);
+
+        // the same campaign landing again within 30 minutes is the same visit
+        const recent = await t.Touch.where({ visitorId: visitor.id }).orderBy((x) => x.touchedAt.desc()).limit(1).all();
+        const latest = recent[0];
+        if (
             latest &&
+            latest.channel === touchData.channel &&
             latest.source === touchData.source &&
             latest.medium === touchData.medium &&
             latest.campaign === touchData.campaign &&
-            latest.gclid === touchData.gclid;
-
-        if (latest && sameCampaign && Date.now() - new Date(latest.touchedAt).getTime() < DEDUPE_MS) {
+            (latest.gclid ?? null) === touchData.gclid &&
+            (latest.fbclid ?? null) === touchData.fbclid &&
+            Math.abs(new Date(touchData.touchedAt) - new Date(latest.touchedAt)) < SAME_TOUCH_MS
+        ) {
             return res.status(200).json({
                 id: latest.id,
                 touchId: latest.id,
-                visitorId,
+                visitorId: b.visitorId,
                 visitorRecordId: visitor.id,
                 siteId: latest.siteId ?? null,
                 channel: latest.channel,
                 touchedAt: latest.touchedAt,
-                from: 'same campaign'
+                deduplicated: true,
             });
         }
 
-        const touch = await db.orm.public.Touch.create(touchData);
-
+        const touch = await t.Touch.create(touchData);
         return res.status(201).json({
             id: touch.id,
             touchId: touch.id,
-            visitorId,
+            visitorId: b.visitorId,
             visitorRecordId: visitor.id,
             siteId: touch.siteId ?? null,
             channel: touch.channel,
             touchedAt: touch.touchedAt,
         });
     } catch (error) {
-        console.error("recordTouch error:", error.message);
-        return res.status(500).json({ message: "Internal server error while recording touch" });
+        return sendError(res, error, "recordTouch");
     }
 };
 
 /**
- * POST /v1/identify
- *
- * Links a visitor to a known customer email/phone.
- * Called after the user provides their contact details (booking form, checkout).
- *
- * Body:
- *   visitorId*  - client-side visitor ID
- *   email?      - user's email
- *   phone?      - user's phone (E.164 preferred)
+ * POST /v1/identify — Body: visitorId*, email? phone? (one required), consent?
+ * Links this browser to the customer; one customer can have many visitors (phone + laptop).
  */
-import { resolveOrCreateCustomer, linkVisitorToCustomer, hashIdentifier } from "../services/identityService.js";
-
 export const identifyVisitor = async (req, res) => {
     try {
         const workspaceId = req.workspaceId;
-        const { visitorId, email, phone} = req.body ?? {};
+        const t = tenantDb(db, workspaceId);
+        const { visitorId, email, phone, consent } = req.body ?? {};
+        if (!validVisitorId(visitorId)) return res.status(400).json({ message: "visitorId is required", code: "validation_error" });
+        if (!email && !phone) return res.status(400).json({ message: "email or phone is required", code: "validation_error" });
 
-        if (!visitorId) return res.status(400).json({ message: "visitorId is required" });
-        if (!email && !phone) return res.status(400).json({ message: "email or phone is required" });
+        const { consentMode } = await trackingContext(workspaceId);
+        const blocked = consentBlock(consentMode, consent);
+        if (blocked) return res.status(202).json({ stored: false, reason: blocked });
 
-        const { customer, isNew } = await resolveOrCreateCustomer(db, workspaceId, { email, phone });
-
-        await linkVisitorToCustomer(db, workspaceId, visitorId, customer.id);
-        const visitor = await db.orm.public.Visitor.where({ workspaceId, visitorId }).first();
-        const touches = visitor
-            ? await db.orm.public.Touch.where({ visitorId: visitor.id }).all()
-            : [];
+        const { customer, isNew } = await resolveCustomer(db, workspaceId, { email, phone });
+        if (!customer) return res.status(400).json({ message: "email or phone is not valid", code: "validation_error" });
+        const visitor = await linkVisitorToCustomer(db, workspaceId, visitorId, customer.id);
+        const touches = await t.Touch.where({ visitorId: visitor.id }).all();
 
         return res.status(200).json({
             customerId: customer.id,
             visitorId,
-            visitorRecordId: visitor?.id ?? null,
-            touchIds: touches.map((touch) => touch.id),
+            visitorRecordId: visitor.id,
+            touchIds: touches.map((x) => x.id),
             touchCount: touches.length,
             isNew,
         });
     } catch (error) {
-        console.error("identifyVisitor error:", error.message);
-        return res.status(500).json({ message: "Internal server error while identifying visitor" });
+        return sendError(res, error, "identifyVisitor");
     }
 };
 
+const DEFAULT_TOKEN_TTL_MS = 7 * 24 * 3600 * 1000; // bookings and slow payments complete days later
+const MAX_TOKEN_TTL_MS = 30 * 24 * 3600 * 1000;
+
 /**
- * POST /v1/checkout-sessions
+ * POST /v1/checkout-sessions — Body: visitorId*, expiresInMs? (default 7 days, max 30 days)
  *
- * Freezes a visitor's current touches and returns a checkout token.
- * The token should be passed through the payment/booking system so we can
- * link the order back to its marketing source.
- *
- * Body:
- *   visitorId*      - client-side visitor ID
- *   expiresInMs?    - token TTL in milliseconds (default 2 hours)
+ * Token rules:
+ *   - every call issues a NEW token with its own frozen snapshot; earlier tokens stay valid until
+ *     they expire or are used, so a visitor who abandons checkout and returns later gets a fresh
+ *     snapshot that includes the newer touches (e.g. the retargeting ad);
+ *   - a token is used once: the first order (or booking) that presents it consumes it, and the
+ *     invoice of that booking inherits the booking's credit;
+ *   - the lookback window is applied to the frozen touches at conversion time.
  */
 export const createCheckoutSession = async (req, res) => {
     try {
         const workspaceId = req.workspaceId;
-        const { visitorId, expiresInMs = 2 * 60 * 60 * 1000 } = req.body ?? {};
+        const t = tenantDb(db, workspaceId);
+        const { visitorId, expiresInMs, consent } = req.body ?? {};
+        if (!validVisitorId(visitorId)) return res.status(400).json({ message: "visitorId is required", code: "validation_error" });
+        const ttl = expiresInMs === undefined ? DEFAULT_TOKEN_TTL_MS : Number(expiresInMs);
+        if (!Number.isFinite(ttl) || ttl < 60_000 || ttl > MAX_TOKEN_TTL_MS) {
+            return res.status(400).json({ message: "expiresInMs must be between 60000 (1 minute) and 2592000000 (30 days)", code: "validation_error" });
+        }
 
-        if (!visitorId) return res.status(400).json({ message: "visitorId is required" });
+        const { consentMode } = await trackingContext(workspaceId);
+        const blocked = consentBlock(consentMode, consent);
+        if (blocked) return res.status(202).json({ stored: false, reason: blocked, token: null });
 
-        // Find visitor
-        const visitor = await db.orm.public.Visitor.where({ workspaceId, visitorId }).first();
-        if (!visitor) return res.status(404).json({ message: "Visitor not found. Send a touch first." });
-
-        // Get all touches for this visitor
-        const touches = await db.orm.public.Touch.where({ visitorId: visitor.id }).all();
-
-        // Freeze the touch snapshot
-        const frozenTouches = touches.map(t => ({
-            id: t.id,
-            channel: t.channel,
-            source: t.source,
-            medium: t.medium,
-            campaign: t.campaign,
-            gclid: t.gclid,
-            fbclid: t.fbclid,
-            touchedAt: t.touchedAt,
+        const visitor = await ensureVisitor(db, workspaceId, visitorId);
+        const touches = (await t.Touch.where({ visitorId: visitor.id }).all()).sort((a, b) => new Date(a.touchedAt) - new Date(b.touchedAt));
+        const frozenTouches = touches.map((x) => ({
+            id: x.id,
+            channel: x.channel,
+            source: x.source,
+            medium: x.medium,
+            campaign: x.campaign,
+            gclid: x.gclid,
+            fbclid: x.fbclid,
+            touchedAt: x.touchedAt,
         }));
 
-        const expiresAt = new Date(Date.now() + expiresInMs).toISOString();
-
-        const session = await db.orm.public.CheckoutSession.create({
-            workspaceId,
+        const session = await t.CheckoutSession.create({
+            token: crypto.randomUUID(),
             visitorId: visitor.id,
             frozenTouches,
-            expiresAt,
+            expiresAt: new Date(Date.now() + ttl).toISOString(),
         });
 
         return res.status(201).json({
@@ -240,12 +229,11 @@ export const createCheckoutSession = async (req, res) => {
             token: session.token,
             visitorId,
             visitorRecordId: visitor.id,
-            touchIds: frozenTouches.map((touch) => touch.id),
+            touchIds: frozenTouches.map((x) => x.id),
             touchCount: frozenTouches.length,
             expiresAt: session.expiresAt,
         });
     } catch (error) {
-        console.error("createCheckoutSession error:", error.message);
-        return res.status(500).json({ message: "Internal server error while creating checkout session" });
+        return sendError(res, error, "createCheckoutSession");
     }
 };

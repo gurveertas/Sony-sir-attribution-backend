@@ -1,12 +1,7 @@
-/**
- * API key lifecycle for browser SDK and server-to-server integrations.
- * Keys are stored as hashes; the plaintext is returned only at creation or rotation.
- * Workspace ownership comes from the authenticated dashboard user, never from the request body.
- */
-
 import crypto from "crypto";
 import { db } from "../src/prisma/db.js";
 import { writeAudit } from "../services/audit.js";
+import { clearKeyCache } from "../middlewares/apiKeyAuth.js";
 
 const MODES = ["test", "live"];
 const KEY_TYPE = "publishable";
@@ -134,9 +129,12 @@ export const createApiKey = async (req, res) => {
       const origins = parseOrigins(allowedOrigins, mode);
       if (origins.error) return res.status(400).json({ message: origins.error });
       originsList = origins.value;
-    } else if (Array.isArray(allowedOrigins)) {
-      originsList = allowedOrigins;
     }
+    // secret keys are for servers: origins do not apply to them
+
+    const limit = Number(rateLimitPerMin);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100000)
+      return res.status(400).json({ message: "rateLimitPerMin must be a whole number from 1 to 100000" });
 
     if (siteId !== undefined && typeof siteId !== "string")
       return res.status(400).json({ message: "siteId must be a string" });
@@ -147,12 +145,12 @@ export const createApiKey = async (req, res) => {
       if (!site) return res.status(404).json({ message: "Site not found" });
     }
 
-    // 3. Enforce one active key per type per workspace
+    // 3. Enforce one active key per type and mode (a live and a test/sandbox key can coexist)
     const allKeys = await fetchWorkspaceKeys(db, workspaceId);
-    const existing = allKeys.find((row) => !row.revokedAt && row.type === keyType);
+    const existing = allKeys.find((row) => !row.revokedAt && row.type === keyType && row.mode === mode && !(row.expiresAt && new Date(row.expiresAt) < new Date()));
     if (existing)
       return res.status(409).json({
-        message: `This workspace already has an active ${keyType} API key. Rotate or revoke it first.`,
+        message: `This workspace already has an active ${mode} ${keyType} API key. Rotate or revoke it first.`,
       });
 
     // 4. Generate the key and save it with the audit entry, in one transaction
@@ -168,10 +166,10 @@ export const createApiKey = async (req, res) => {
         keyPrefix,
         keyHash,
         allowedOrigins: originsList,
-        rateLimitPerMin: Number(rateLimitPerMin) || RATE_LIMIT_PER_MIN,
+        rateLimitPerMin: limit,
         createdBy: req.user.id,
       });
-      // await audit(tx, req, workspaceId, "api_key.created", row.id, { mode, type: keyType });
+      await audit(tx, req, workspaceId, "api_key.created", row.id, { mode, type: keyType });
       return row;
     });
 
@@ -227,7 +225,13 @@ export const updateApiKey = async (req, res) => {
     if (!key || key.revokedAt) return res.status(404).json({ message: "API key not found" });
 
     const changes = {};
-    const { name, allowedOrigins } = req.body ?? {};
+    const { name, allowedOrigins, rateLimitPerMin } = req.body ?? {};
+    if (rateLimitPerMin !== undefined) {
+      const limit = Number(rateLimitPerMin);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100000)
+        return res.status(400).json({ message: "rateLimitPerMin must be a whole number from 1 to 100000" });
+      changes.rateLimitPerMin = limit;
+    }
 
     if (name !== undefined) {
       if (!validName(name))
@@ -235,7 +239,7 @@ export const updateApiKey = async (req, res) => {
       changes.name = name.trim();
     }
 
-    if (allowedOrigins !== undefined) {
+    if (allowedOrigins !== undefined && key.type === "publishable") {
       const origins = parseOrigins(allowedOrigins, key.mode);
       if (origins.error) return res.status(400).json({ message: origins.error });
       changes.allowedOrigins = origins.value;
@@ -246,9 +250,9 @@ export const updateApiKey = async (req, res) => {
 
     await db.transaction(async (tx) => {
       await tx.orm.public.ApiKey.where({ id: key.id }).update(changes);
-      // await audit(tx, req, workspaceId, "api_key.updated", key.id, {
-      //   fields: Object.keys(changes), // field names only
-      // });
+      await audit(tx, req, workspaceId, "api_key.updated", key.id, {
+        fields: Object.keys(changes), // field names only
+      });
     });
 
     // Re-read so the response shows the saved values
@@ -285,6 +289,7 @@ export const revokeApiKey = async (req, res) => {
         });
         await audit(tx, req, workspaceId, "api_key.revoked", key.id);
       });
+      clearKeyCache();
     }
 
     return res.status(204).end();
@@ -300,41 +305,57 @@ export const revokeApiKey = async (req, res) => {
 // transaction, so there is no gap where the workspace has no working key.
 // ---------------------------------------------------------------------------
 
+/**
+ * POST /api-keys/rotate            Body: { id?, graceHours? }
+ * POST /api-keys/:id/rotate        Body: { graceHours? }
+ * Issues a new key with the same name, type, mode, origins and rate limit. The old key keeps working
+ * for `graceHours` (default 24, 0 = revoke now, max 168) so a live site can switch without downtime.
+ */
+export async function rotateKeyRecord(client, { workspaceId, keyId = null, graceHours = 24, actorUserId, req = null }) {
+  const keys = (await fetchWorkspaceKeys(client, workspaceId)).filter((row) => !row.revokedAt);
+  const old = keyId ? keys.find((k) => k.id === keyId) : keys.find((k) => k.type === KEY_TYPE) ?? keys[0];
+  if (!old) return null;
+  const { key, keyPrefix, keyHash } = generateKey(old.mode, old.type);
+  const grace = Math.min(168, Math.max(0, Number(graceHours) || 0));
+  const created = await client.transaction(async (tx) => {
+    await tx.orm.public.ApiKey.where({ id: old.id }).update(
+      grace > 0
+        ? { expiresAt: new Date(Date.now() + grace * 3600_000).toISOString() }
+        : { revokedAt: new Date().toISOString() },
+    );
+    const row = await tx.orm.public.ApiKey.create({
+      workspaceId,
+      siteId: old.siteId ?? null,
+      name: old.name,
+      type: old.type,
+      mode: old.mode,
+      keyPrefix,
+      keyHash,
+      allowedOrigins: old.allowedOrigins,
+      rateLimitPerMin: old.rateLimitPerMin,
+      rotatedFromId: old.id,
+      createdBy: actorUserId,
+    });
+    if (req) await audit(tx, req, workspaceId, "api_key.rotated", row.id, { rotatedFromId: old.id, graceHours: grace });
+    return row;
+  });
+  clearKeyCache();
+  return { created, key, oldKeyId: old.id, oldKeyExpiresAt: grace > 0 ? new Date(Date.now() + grace * 3600_000).toISOString() : null };
+}
+
 export const rotateApiKey = async (req, res) => {
   try {
     const workspaceId = requireCompanyAdmin(req, res);
     if (!workspaceId) return;
-
-    const old = await fetchActiveKey(db, workspaceId);
-    if (!old) return res.status(404).json({ message: "No active API key to rotate" });
-
-    const { key, keyPrefix, keyHash } = generateKey(old.mode);
-
-    const created = await db.transaction(async (tx) => {
-      // Revoke first, so the one-active-key rule is never broken
-      await tx.orm.public.ApiKey.where({ id: old.id }).update({
-        revokedAt: new Date().toISOString(),
-      });
-
-      const row = await tx.orm.public.ApiKey.create({
-        workspaceId,
-        siteId: old.siteId ?? null,
-        name: old.name,
-        type: KEY_TYPE,
-        mode: old.mode,
-        keyPrefix,
-        keyHash,
-        allowedOrigins: old.allowedOrigins,
-        rateLimitPerMin: old.rateLimitPerMin,
-        rotatedFromId: old.id, // links new key to old one
-        createdBy: req.user.id,
-      });
-
-      // await audit(tx, req, workspaceId, "api_key.rotated", row.id, { rotatedFromId: old.id });
-      return row;
+    const out = await rotateKeyRecord(db, {
+      workspaceId,
+      keyId: req.params?.id ?? req.body?.id ?? null,
+      graceHours: req.body?.graceHours ?? 24,
+      actorUserId: req.user.id,
+      req,
     });
-
-    return res.status(201).json({ ...toPublic(created), key });
+    if (!out) return res.status(404).json({ message: "No active API key to rotate" });
+    return res.status(201).json({ ...toPublic(out.created), key: out.key, apiKey: out.key, previousKeyId: out.oldKeyId, previousKeyExpiresAt: out.oldKeyExpiresAt });
   } catch (error) {
     console.error("rotateApiKey error:", error.message);
     return res.status(500).json({ message: "Internal server error while rotating API key" });

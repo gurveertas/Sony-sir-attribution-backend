@@ -332,6 +332,7 @@ All lists are paginated: `?page=1&limit=25` (max `limit` 100) and return
 |---|---|
 | `GET /v1/orders` | `status`, `locationId`, `from`, `to` |
 | `GET /v1/orders/:id/attribution` | `model` — the order's journey and credit |
+| `GET /v1/refunds` | `from`, `to` (by refund date), `locationId`, `channel`, `orderId`, `search` |
 | `GET /v1/customers` | `externalIdKey` + `externalId` |
 | `GET /v1/customers/:id/journey` | `model` — touches, bookings, orders, credit |
 | `GET /v1/bookings` | `status`, `locationId`, `from`, `to` (by appointment time) |

@@ -26,7 +26,7 @@ const sha256 = (value) => crypto.createHash("sha256").update(String(value)).dige
 
 // ── Webhook URL ──────────────────────────────────────────────────────────────
 
-const LEGACY_FALLBACK_BASE = "https://asb-sonu.vercel.app";
+const LEGACY_FALLBACK_BASE = "https://asbtemp-production.up.railway.app";
 
 export function getPublicApiBase() {
     return ENV.APP_API_URL || process.env.APP_API_URL || LEGACY_FALLBACK_BASE;

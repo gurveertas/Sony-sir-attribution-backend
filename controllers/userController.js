@@ -1,10 +1,7 @@
-/**
- * Self-service profile and company-detail changes for the authenticated user.
- * The workspace is taken from the session, and editable fields are deliberately whitelisted before updating.
- */
-
 import { db } from "../src/prisma/db.js";
 import bcrypt from 'bcryptjs';
+import { passwordProblem } from "../utils/passwordPolicy.js";
+import { writeAudit } from "../services/audit.js";
 
 export const updateDetails = async (req, res) => {
     try {
@@ -142,7 +139,7 @@ export const updateDetails = async (req, res) => {
                 const { emailVerificationHash, emailVerificationExpires, ...safe } = workspace;
                 workspace = safe;
             } catch (error) {
-                console.error("Workspace update failed:", error);
+                console.error("Workspace update failed:", error?.message ?? error);
                 if (error?.code === "23505") {
                     return res.status(409).json({
                         message: "A unique constraint was violated",
@@ -167,7 +164,7 @@ export const updateDetails = async (req, res) => {
                 const { passwordHash, ...safeUser } = updatedUser;
                 user = safeUser;
             } catch (error) {
-                console.error("Admin update failed:", error);
+                console.error("Admin update failed:", error?.message ?? error);
                 return res.status(500).json({
                     message: "Failed to update admin details",
                 });
@@ -180,52 +177,94 @@ export const updateDetails = async (req, res) => {
             user,
         });
     } catch (error) {
-        console.error("Error updating company details:", error);
+        console.error("Error updating company details:", error?.message ?? error);
 
         return res.status(500).json({
             message: "Internal server error",
         });
     }
 };
+const COMPANY_ROLES = ["company_admin", "company_viewer"];
+const USER_STATUSES = ["active", "deactivated"];
+
+const safeUser = ({ passwordHash: _p, twoFactorSecretEnc: _t, ...rest }) => rest;
+
+/**
+ * Who may manage `target`?
+ *   - a company admin: only users of their own company (never platform admins)
+ *   - a platform admin: any company user (platform admins are managed through /platform-admins)
+ */
+function canManage(actor, target) {
+    if (!target || target.role === "platform_admin") return false;
+    if (actor.role === "platform_admin") return true;
+    return actor.role === "company_admin" && Boolean(actor.workspaceId) && target.workspaceId === actor.workspaceId;
+}
+
+async function countActiveAdmins(workspaceId) {
+    const users = await db.orm.public.User.where({ workspaceId, role: "company_admin" }).all();
+    return users.filter((u) => u.status === "active").length;
+}
+
+/**
+ * POST /api/user/add-member
+ * company_admin: adds a user to their own company. platform_admin: must name the company in body.workspaceId.
+ * Roles are limited to company_admin / company_viewer — nobody can create a platform admin here.
+ */
 export const addMember = async (req, res) => {
     try {
-        const workspaceId = req.user?.workspaceId ? req.user.workspaceId : req.body?.workspaceId;
-        if (!workspaceId) {
-            return res.status(400).json({ message: "No workspace id in middleware or body" });
+        const actor = req.user;
+        if (!actor || !["company_admin", "platform_admin"].includes(actor.role)) {
+            return res.status(403).json({ message: "You do not have permission for this action" });
         }
+        const workspaceId = actor.role === "platform_admin" ? req.body?.workspaceId : actor.workspaceId;
+        if (!workspaceId) return res.status(400).json({ message: "workspaceId is required" });
+
         const workspace = await db.orm.public.Workspace.where({ id: workspaceId }).first();
-        if (!workspace) {
-            return res.status(404).json({ message: "Workspace not found" });
-        }
-        const userRole = req.user?.role;
-        if (userRole === "company_viewer") {
-            return res.status(400).json({ message: "know your place, FOOL" });
-        }
-        const { name, email, password, role } = req.body;
+        if (!workspace) return res.status(404).json({ message: "Workspace not found" });
+
+        const { name, email, password, role } = req.body ?? {};
         if (!name || !email || !password || !role) {
-            return res.status(400).json({ message: "All credentials are required" });
+            return res.status(400).json({ message: "name, email, password and role are required" });
         }
-        const normalizedEmail = email.trim().toLowerCase();
+        if (!COMPANY_ROLES.includes(role)) {
+            return res.status(400).json({ message: "role must be company_admin or company_viewer" });
+        }
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const problem = passwordProblem(password, normalizedEmail);
+        if (problem) return res.status(400).json({ message: problem });
+
         const existing = await db.orm.public.User.where({ email: normalizedEmail }).first();
-        if (existing) {
-            return res.status(400).json({ message: "user already exists" });
-        }
+        if (existing) return res.status(409).json({ message: "A user with this email already exists" });
+
         const passHash = await bcrypt.hash(password, 10);
-        const user = await db.orm.public.User.create({
-            workspaceId,
-            email: normalizedEmail,
-            passwordHash: passHash,
-            name: typeof name === 'string' ? name.trim() : name,
-            role,
-            status: "active",
+        const user = await db.transaction(async (tx) => {
+            const created = await tx.orm.public.User.create({
+                workspaceId,
+                email: normalizedEmail,
+                passwordHash: passHash,
+                name: String(name).trim(),
+                role,
+                status: "active",
+            });
+            await writeAudit(tx.orm.public, {
+                workspaceId,
+                actorType: actor.role === "platform_admin" ? "platform_admin" : "user",
+                actorUserId: actor.id,
+                action: "user.created",
+                targetType: "user",
+                targetId: created.id,
+                metadata: { role },
+                ip: req.ip ?? null,
+                userAgent: req.headers?.["user-agent"] ?? null,
+            });
+            return created;
         });
-        const { passwordHash: _, ...safeUser } = user;
-        return res.status(201).json({ message: "member created succesfully", user: safeUser });
+        return res.status(201).json({ message: "Member created successfully", user: safeUser(user) });
     } catch (error) {
-        console.log(error);
+        console.error("addMember error:", error.message);
         return res.status(500).json({ message: "Internal server error in addMember" });
     }
-}
+};
 
 export const addPlatformAdmin = async (req, res) => {
     try {
@@ -247,9 +286,8 @@ export const addPlatformAdmin = async (req, res) => {
             return res.status(400).json({ message: "Email cannot be empty" });
         }
 
-        if (typeof password !== "string" || password.length < 8) {
-            return res.status(400).json({ message: "Password must be at least 8 characters long" });
-        }
+        const passwordError = passwordProblem(password, email);
+        if (passwordError) return res.status(400).json({ message: passwordError });
 
         const normalizedEmail = email.trim().toLowerCase();
         const existing = await db.orm.public.User.where({ email: normalizedEmail }).first();
@@ -268,14 +306,23 @@ export const addPlatformAdmin = async (req, res) => {
             emailVerifiedAt: new Date().toISOString(),
         });
 
-        const { passwordHash: _, ...safeUser } = user;
+        await writeAudit(db.orm.public, {
+            workspaceId: null,
+            actorType: "platform_admin",
+            actorUserId: req.user.id,
+            action: "platform_admin.created",
+            targetType: "user",
+            targetId: user.id,
+            ip: req.ip ?? null,
+            userAgent: req.headers?.["user-agent"] ?? null,
+        });
 
         return res.status(201).json({
             message: "Platform admin created successfully",
-            user: safeUser,
+            user: safeUser(user),
         });
     } catch (error) {
-        console.error("Error in addPlatformAdmin:", error);
+        console.error("Error in addPlatformAdmin:", error?.message ?? error);
         return res.status(500).json({ message: "Internal server error in addPlatformAdmin" });
     }
 };
@@ -288,7 +335,7 @@ export const getPlatformAdmins = async (req, res) => {
         }
 
         const admins = await db.orm.public.User.where({ role: "platform_admin" }).all();
-        const safeAdmins = admins.map(({ passwordHash, ...admin }) => admin);
+        const safeAdmins = admins.map(safeUser);
 
         return res.status(200).json({
             message: "Platform admins fetched successfully",
@@ -296,7 +343,7 @@ export const getPlatformAdmins = async (req, res) => {
             data: safeAdmins,
         });
     } catch (error) {
-        console.error("Error in getPlatformAdmins:", error);
+        console.error("Error in getPlatformAdmins:", error?.message ?? error);
         return res.status(500).json({ message: "Internal server error in getPlatformAdmins" });
     }
 };
@@ -337,57 +384,158 @@ export const deletePlatformAdmin = async (req, res) => {
             message: "Platform admin deleted successfully",
         });
     } catch (error) {
-        console.error("Error in deletePlatformAdmin:", error);
+        console.error("Error in deletePlatformAdmin:", error?.message ?? error);
         return res.status(500).json({ message: "Internal server error in deletePlatformAdmin" });
     }
 };
 
 
+/**
+ * PATCH /api/user/:userId — change a company user's name, role or status.
+ * Scoped: a company admin can only touch users of their own company; nobody can grant platform_admin.
+ */
 export const updateMember = async (req, res) => {
     try {
+        const actor = req.user;
         const userId = req.params.userId;
-        if (!userId) {
-            return res.status(400).json({ message: "No user id found in URL" });
-        }
-        const { role, name, status } = req.body;
-        if (!role && !name && !status) {
-            return res.status(400).json({ message: "At least one field is required to update" });
-        }
+        if (!userId) return res.status(400).json({ message: "No user id found in URL" });
+
+        const target = await db.orm.public.User.where({ id: userId }).first();
+        if (!target || !canManage(actor, target)) return res.status(404).json({ message: "User not found" });
+
+        const { role, name, status } = req.body ?? {};
         const updates = {};
-        if (role) {
+        if (role !== undefined) {
+            if (!COMPANY_ROLES.includes(role)) return res.status(400).json({ message: "role must be company_admin or company_viewer" });
             updates.role = role;
         }
-        if (name) {
-            updates.name = name;
-        }
-        if (status) {
+        if (status !== undefined) {
+            if (!USER_STATUSES.includes(status)) return res.status(400).json({ message: "status must be active or deactivated" });
             updates.status = status;
         }
-        if (Object.keys(updates).length === 0) {
-            return res.status(400).json({ message: "No valid fields to update" });
+        if (name !== undefined) {
+            if (typeof name !== "string" || !name.trim()) return res.status(400).json({ message: "name cannot be empty" });
+            updates.name = name.trim();
         }
-        const updatedUser = await db.orm.public.User.where({ id: userId }).update(updates);
-        if (!updatedUser) {
-            return res.status(404).json({ message: "User not found" });
+        if (!Object.keys(updates).length) return res.status(400).json({ message: "At least one of role, name or status is required" });
+
+        const losesAdmin =
+            target.role === "company_admin" && target.status === "active" &&
+            ((updates.role && updates.role !== "company_admin") || updates.status === "deactivated");
+        if (losesAdmin && (await countActiveAdmins(target.workspaceId)) <= 1) {
+            return res.status(409).json({ code: "last_admin", message: "A company must keep at least one active admin" });
         }
+
+        await db.transaction(async (tx) => {
+            await tx.orm.public.User.where({ id: target.id }).update(updates);
+            await writeAudit(tx.orm.public, {
+                workspaceId: target.workspaceId,
+                actorType: actor.role === "platform_admin" ? "platform_admin" : "user",
+                actorUserId: actor.id,
+                action: "user.updated",
+                targetType: "user",
+                targetId: target.id,
+                metadata: { changedFields: Object.keys(updates), role: updates.role, status: updates.status },
+                ip: req.ip ?? null,
+                userAgent: req.headers?.["user-agent"] ?? null,
+            });
+        });
         return res.status(200).json({ message: "User updated successfully" });
     } catch (error) {
-        console.log(error);
+        console.error("updateMember error:", error.message);
         return res.status(500).json({ message: "Internal server error in updateMember" });
     }
-}
+};
 
+/**
+ * DELETE /api/user/:userId — remove a company user (same scoping as updateMember).
+ * A user who is referenced elsewhere (e.g. sent invites) is deactivated instead of deleted.
+ */
 export const deleteUser = async (req, res) => {
     try {
-
+        const actor = req.user;
         const userId = req.params.userId;
-        if (!userId) {
-            return res.status(400).json({ message: "No userId found in URL" });
+        if (!userId) return res.status(400).json({ message: "No userId found in URL" });
+        if (userId === actor?.id) return res.status(400).json({ message: "You cannot delete your own account" });
+
+        const target = await db.orm.public.User.where({ id: userId }).first();
+        if (!target || !canManage(actor, target)) return res.status(404).json({ message: "User not found" });
+        if (target.role === "company_admin" && target.status === "active" && (await countActiveAdmins(target.workspaceId)) <= 1) {
+            return res.status(409).json({ code: "last_admin", message: "A company must keep at least one active admin" });
         }
-        await db.orm.public.User.where({ id: userId }).delete();
-        return res.status(200).json({ message: "team memeber deleted successfully" });
+
+        let outcome = "deleted";
+        try {
+            await db.orm.public.User.where({ id: target.id }).delete();
+        } catch (err) {
+            if (err?.code !== "23503") throw err;
+            await db.orm.public.User.where({ id: target.id }).update({ status: "deactivated" });
+            outcome = "deactivated";
+        }
+        await writeAudit(db.orm.public, {
+            workspaceId: target.workspaceId,
+            actorType: actor.role === "platform_admin" ? "platform_admin" : "user",
+            actorUserId: actor.id,
+            action: outcome === "deleted" ? "user.deleted" : "user.deactivated",
+            targetType: "user",
+            targetId: target.id,
+            ip: req.ip ?? null,
+            userAgent: req.headers?.["user-agent"] ?? null,
+        });
+        return res.status(200).json({
+            message: outcome === "deleted" ? "Team member deleted successfully" : "Team member has history, so it was deactivated instead",
+            outcome,
+        });
     } catch (error) {
-        console.log(error);
+        console.error("deleteUser error:", error.message);
         return res.status(500).json({ message: "Internal server error in user deletion" });
     }
-}
+};
+
+/**
+ * PATCH /api/user/platform-admins/:userId — rename or (de)activate another platform admin.
+ * The last active platform admin cannot be deactivated.
+ */
+export const updatePlatformAdmin = async (req, res) => {
+    try {
+        if (req.user?.role !== "platform_admin") return res.status(403).json({ message: "Platform admins only" });
+        const target = await db.orm.public.User.where({ id: req.params.userId }).first();
+        if (!target || target.role !== "platform_admin") return res.status(404).json({ message: "Platform admin not found" });
+
+        const { name, status } = req.body ?? {};
+        const updates = {};
+        if (name !== undefined) {
+            if (typeof name !== "string" || !name.trim()) return res.status(400).json({ message: "name cannot be empty" });
+            updates.name = name.trim();
+        }
+        if (status !== undefined) {
+            if (!USER_STATUSES.includes(status)) return res.status(400).json({ message: "status must be active or deactivated" });
+            if (status === "deactivated") {
+                if (target.id === req.user.id) return res.status(400).json({ message: "You cannot deactivate your own account" });
+                const admins = await db.orm.public.User.where({ role: "platform_admin" }).all();
+                if (admins.filter((a) => a.status === "active").length <= 1) {
+                    return res.status(409).json({ message: "Cannot deactivate the only remaining platform admin" });
+                }
+            }
+            updates.status = status;
+        }
+        if (!Object.keys(updates).length) return res.status(400).json({ message: "name or status is required" });
+
+        await db.orm.public.User.where({ id: target.id }).update(updates);
+        await writeAudit(db.orm.public, {
+            workspaceId: null,
+            actorType: "platform_admin",
+            actorUserId: req.user.id,
+            action: "platform_admin.updated",
+            targetType: "user",
+            targetId: target.id,
+            metadata: { changedFields: Object.keys(updates) },
+            ip: req.ip ?? null,
+            userAgent: req.headers?.["user-agent"] ?? null,
+        });
+        return res.status(200).json({ message: "Platform admin updated" });
+    } catch (error) {
+        console.error("updatePlatformAdmin error:", error.message);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+};

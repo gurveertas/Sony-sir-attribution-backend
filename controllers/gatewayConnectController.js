@@ -1,10 +1,4 @@
 /**
- * One-click payment gateway connection flows.
- * Provider credentials are validated, used to create or verify remote webhooks, then encrypted before storage.
- * Never return stored credentials; one-time setup secrets must be the only sensitive values exposed to the caller.
- */
-
-/**
  * Payment-gateway connect flow — /api/workspace/connectors/{gateways,connect,:id/*}
  *
  *   GET  /connectors/gateways          catalog of supported gateways + form fields (drives the UI)

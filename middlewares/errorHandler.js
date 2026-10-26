@@ -11,9 +11,9 @@
 import ENV from "../utils/env.js";
 
 export function errorHandler(err, req, res, _next) {
-    // Log the error
-    console.error(`[ERROR] ${req.method} ${req.originalUrl}:`, err.message);
-    if (ENV.NODE_ENV !== "production") {
+    // Log the error (method + path only: never request bodies or personal data)
+    console.error(`[ERROR] ${req.method} ${String(req.originalUrl ?? "").split("?")[0]}:`, err.message);
+    if (ENV.NODE_ENV === "development") {
         console.error(err.stack);
     }
 
@@ -21,6 +21,7 @@ export function errorHandler(err, req, res, _next) {
     if (err.code === "23505") {
         return res.status(409).json({
             message: "A record with this value already exists",
+            code: "conflict",
         });
     }
 
@@ -28,6 +29,7 @@ export function errorHandler(err, req, res, _next) {
     if (err.code === "23503") {
         return res.status(400).json({
             message: "Referenced record does not exist",
+            code: "validation_error",
         });
     }
 
@@ -35,19 +37,16 @@ export function errorHandler(err, req, res, _next) {
     if (err.type === "entity.parse.failed") {
         return res.status(400).json({
             message: "Invalid JSON in request body",
+            code: "invalid_json",
         });
     }
 
     // Default
     const statusCode = err.statusCode || err.status || 500;
     const response = {
-        message: statusCode === 500 ? "Internal server error" : err.message,
+        message: statusCode >= 500 ? "Internal server error" : err.message,
+        code: err.code && typeof err.code === "string" && !/^\d+$/.test(err.code) ? err.code : statusCode >= 500 ? "internal_error" : "error",
     };
-
-    // Include stack trace in development
-    if (ENV.NODE_ENV !== "production" && err.stack) {
-        response.stack = err.stack;
-    }
 
     return res.status(statusCode).json(response);
 }

@@ -1,9 +1,4 @@
 /**
- * Company workspace administration: settings, team, locations, rules, webhooks, and audit history.
- * Middleware establishes the user and role; handlers must still scope every database operation to that workspace.
- */
-
-/**
  * Workspace Settings Controller  —  /api/workspace/*
  *
  * Company admins manage their workspace settings, team invites,
@@ -18,6 +13,16 @@ import { sendEmail } from "../services/emailServices.js";
 import bcrypt from "bcryptjs";
 import { encryptSecret } from "../utils/crypto.js";
 import { getAuditStore, writeAudit } from "../services/audit.js";
+import { validateWorkspaceSettings, scheduleRebuildIfNeeded } from "../services/workspaceSettings.js";
+import { invalidateTrackingCache } from "./trackingController.js";
+import { purgeWorkspace } from "../services/privacy.js";
+import { enqueueJob } from "../services/jobs.js";
+import { passwordProblem } from "../utils/passwordPolicy.js";
+import { isValidTimeZone } from "../utils/timezone.js";
+import { WEBHOOK_EVENT_TYPES } from "../services/webhookDispatcher.js";
+import { sendCsv, wantsCsv, paginate, sortDesc } from "../services/http.js";
+import ENV from "../utils/env.js";
+import { requestRebuild } from "../services/rollups.js";
 
 const orm = () => db.orm.public;
 
@@ -44,25 +49,30 @@ export const getWorkspaceSettings = async (req, res) => {
 
 // DELETE /api/workspace/:workspaceId
 export const deleteWorkspace = async (req, res) => {
-  try {
-    const userRole = req.user.role;
-    if(userRole === "company_viewer"){
-      return res.status(403).json({message : "Know your place, FOOL"});
+    try {
+        const reason = String(req.body?.reason ?? req.query?.reason ?? "").trim();
+        if (req.user.role === "platform_admin") {
+            // platform admins delete a company's data through the audited purge tool
+            if (reason.length < 5) return res.status(400).json({ message: "Provide a reason of at least 5 characters.", code: "reason_required" });
+            const out = await purgeWorkspace(req.params.workspaceId, { keepAccount: false, actorUserId: req.user.id, reason, ip: req.ip, userAgent: req.headers?.["user-agent"] });
+            if (!out) return res.status(404).json({ message: "Workspace not found", code: "not_found" });
+            return res.status(200).json({ message: "Workspace deleted successfully", ...out });
+        }
+        if (req.user.role !== "company_admin") return res.status(403).json({ message: "Only company admins can close the company account", code: "forbidden" });
+        if (req.params.workspaceId !== req.user.workspaceId) return res.status(404).json({ message: "Workspace not found", code: "not_found" });
+        const workspace = await orm().Workspace.where({ id: req.user.workspaceId }).first();
+        if (req.body?.confirm !== workspace?.slug) {
+            return res.status(400).json({ message: `Type your company slug (${workspace?.slug}) in "confirm" to close the account.`, code: "confirmation_required" });
+        }
+        // Closing stops all access and tracking immediately; the data is deleted by the platform team on request.
+        await orm().Workspace.where({ id: workspace.id }).update({ status: "closed", suspendedReason: reason || "Closed by the company", deletedAt: new Date().toISOString() });
+        await writeAudit(orm(), { workspaceId: workspace.id, actorType: "user", actorUserId: req.user.id, action: "workspace.closed", targetType: "workspace", targetId: workspace.id, reason: reason || null, ip: req.ip ?? null, userAgent: req.headers?.["user-agent"] ?? null });
+        return res.status(200).json({ message: "Company account closed" });
+    } catch (error) {
+        console.error("deleteWorkspace:", error.message);
+        return res.status(500).json({ message: "Internal server error in delete workspace", code: "internal_error" });
     }
-    // console.log(req.params);
-    const workspaceId = req.user.workspaceId ? req.user.workspaceId : req.params.workspaceId;
-    await orm().Workspace.where({id : workspaceId}).delete();
-    return res.status(200).json({message : "Workspace deleted successfully"}); 
-  } catch (error) {
-        console.log(error);
-        return res.status(500).json({message : "Internal server error in delete workspace"});
-  }
-}
-
-const ALLOWED_SETTINGS = new Set([
-    "name", "timezone", "weekStart", "reportingCurrency", "industry", "websiteUrl",
-    "defaultModel", "lookbackDays", "lookbackOverrides", "consentMode", "rawRetentionMonths",
-]);
+};
 
 /**
  * PATCH /api/workspace/settings
@@ -78,10 +88,8 @@ export const updateWorkspaceSettings = async (req, res) => {
         );
         if (!Object.keys(changes).length) return res.status(400).json({ message: "No valid settings provided" });
 
-        if (changes.reportingCurrency && !/^[A-Z]{3}$/.test(String(changes.reportingCurrency).toUpperCase())) {
-            return res.status(400).json({ message: "reportingCurrency must be a 3-letter ISO code" });
-        }
-        if (changes.reportingCurrency) changes.reportingCurrency = changes.reportingCurrency.toUpperCase();
+        const problem = validateWorkspaceSettings(changes);
+        if (problem) return res.status(400).json({ message: problem, code: "validation_error" });
 
         await db.transaction(async (tx) => {
             await tx.orm.public.Workspace.where({ id: workspaceId }).update(changes);
@@ -98,9 +106,16 @@ export const updateWorkspaceSettings = async (req, res) => {
             });
         });
 
+        invalidateTrackingCache(workspaceId);
+        const queued = await scheduleRebuildIfNeeded(workspaceId, Object.keys(changes), req.user.id);
+
         const updated = await orm().Workspace.where({ id: workspaceId }).first();
         const { emailVerificationHash, ...safe } = updated;
-        return res.status(200).json({ message: "Settings updated", data: safe });
+        return res.status(200).json({
+            message: queued ? "Settings updated. Reports are being recalculated with the new settings." : "Settings updated",
+            recalculating: queued,
+            data: safe,
+        });
     } catch (error) {
         console.error("updateWorkspaceSettings:", error.message);
         return res.status(500).json({ message: "Internal server error" });
@@ -120,7 +135,12 @@ export const inviteUser = async (req, res) => {
         const workspaceId = req.user.workspaceId;
         const { email, role, allowedLocationIds = [] } = req.body ?? {};
 
-        if (!email) return res.status(400).json({ message: "email is required" });
+        if (!email || !String(email).includes("@")) return res.status(400).json({ message: "a valid email is required" });
+        if (!Array.isArray(allowedLocationIds)) return res.status(400).json({ message: "allowedLocationIds must be a list" });
+        if (allowedLocationIds.length) {
+            const own = new Set((await orm().Location.where({ workspaceId }).all()).map((l) => l.id));
+            if (allowedLocationIds.some((id) => !own.has(id))) return res.status(400).json({ message: "allowedLocationIds contains a location of another company" });
+        }
         if (!["company_admin", "company_viewer"].includes(role)) {
             return res.status(400).json({ message: "role must be company_admin or company_viewer" });
         }
@@ -129,8 +149,8 @@ export const inviteUser = async (req, res) => {
 
         // Check if already a user
         const existingUser = await orm().User.where({ email: normalizedEmail }).first();
-        if (existingUser && existingUser.workspaceId === workspaceId) {
-            return res.status(409).json({ message: "This user is already a member of your workspace" });
+        if (existingUser) {
+            return res.status(409).json({ message: existingUser.workspaceId === workspaceId ? "This user is already a member of your workspace" : "This email already has an account" });
         }
 
         // Check for existing open invite
@@ -172,8 +192,8 @@ export const inviteUser = async (req, res) => {
             await sendEmail({
                 to: normalizedEmail,
                 subject: "You've been invited to join a workspace",
-                html: `<p>You have been invited to join as <strong>${role}</strong>.</p>
-                       <p>Accept your invite: <a href="${process.env.APP_URL || "https://app.example.com"}/accept-invite?token=${rawToken}">Click here</a></p>
+                html: `<p>You have been invited to join the analytics dashboard as <strong>${role === "company_admin" ? "an admin" : "a viewer"}</strong>.</p>
+                       <p>Accept your invite: <a href="${ENV.FRONTEND_URL}/accept-invite?token=${rawToken}">Click here</a></p>
                        <p>This link expires in 7 days.</p>`,
             });
         } catch (emailErr) {
@@ -195,7 +215,6 @@ export const acceptInvite = async (req, res) => {
     try {
         const { token, password, name } = req.body ?? {};
         if (!token) return res.status(400).json({ message: "token is required" });
-        if (!password || password.length < 8) return res.status(400).json({ message: "password must be at least 8 characters" });
 
         const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
         const invite = await orm().Invite.where({ tokenHash }).first();
@@ -206,6 +225,8 @@ export const acceptInvite = async (req, res) => {
         if (new Date(invite.expiresAt) < new Date()) {
             return res.status(400).json({ message: "Invite link has expired" });
         }
+        const pwProblem = passwordProblem(password, invite.email);
+        if (pwProblem) return res.status(400).json({ message: pwProblem, code: "weak_password" });
 
         const passwordHash = await bcrypt.hash(password, 10);
 
@@ -218,6 +239,7 @@ export const acceptInvite = async (req, res) => {
                 role: invite.role,
                 status: "active",
                 emailVerifiedAt: new Date().toISOString(),
+                passwordChangedAt: new Date().toISOString(),
             });
 
             // Create location access if specified
@@ -260,9 +282,19 @@ export const acceptInvite = async (req, res) => {
 export const listTeam = async (req, res) => {
     try {
         const workspaceId = req.user.workspaceId;
-        const users = await orm().User.where({ workspaceId }).all();
+        const [users, access, invites] = await Promise.all([
+            orm().User.where({ workspaceId }).all(),
+            orm().UserLocationAccess.where({ workspaceId }).all(),
+            req.user.role === "company_admin" ? orm().Invite.where({ workspaceId }).all() : [],
+        ]);
         return res.status(200).json({
-            data: users.map(({ passwordHash, ...u }) => u),
+            data: users.map(({ passwordHash, twoFactorSecretEnc, failedLoginCount, lockedUntil, ...u }) => ({
+                ...u,
+                allowedLocationIds: access.filter((a) => a.userId === u.id).map((a) => a.locationId),
+            })),
+            pendingInvites: invites
+                .filter((i) => !i.acceptedAt && !i.revokedAt && new Date(i.expiresAt) > new Date())
+                .map(({ tokenHash, ...i }) => i),
         });
     } catch (error) {
         console.error("listTeam:", error.message);
@@ -281,30 +313,40 @@ export const updateTeamMember = async (req, res) => {
         if (user.id === req.user.id) return res.status(400).json({ message: "Cannot modify your own account here" });
 
         const allowed = ["role", "status"];
-        const changes = Object.fromEntries(
-            Object.entries(req.body ?? {}).filter(([k]) => allowed.includes(k))
-        );
+        const changes = Object.fromEntries(Object.entries(req.body ?? {}).filter(([k]) => allowed.includes(k)));
+        if (changes.role && !["company_admin", "company_viewer"].includes(changes.role)) return res.status(400).json({ message: "Invalid role" });
+        if (changes.status && !["active", "deactivated"].includes(changes.status)) return res.status(400).json({ message: "Invalid status" });
 
-        if (changes.role && !["company_admin", "company_viewer"].includes(changes.role)) {
-            return res.status(400).json({ message: "Invalid role" });
+        const locationIds = req.body?.allowedLocationIds;
+        if (locationIds !== undefined) {
+            if (!Array.isArray(locationIds)) return res.status(400).json({ message: "allowedLocationIds must be a list (empty = all locations)" });
+            const own = new Set((await orm().Location.where({ workspaceId }).all()).map((l) => l.id));
+            if (locationIds.some((id) => !own.has(id))) return res.status(400).json({ message: "allowedLocationIds contains an unknown location" });
         }
-        if (changes.status && !["active", "deactivated"].includes(changes.status)) {
-            return res.status(400).json({ message: "Invalid status" });
+        if (!Object.keys(changes).length && locationIds === undefined) return res.status(400).json({ message: "Nothing to update" });
+
+        if (user.role === "company_admin" && ((changes.role && changes.role !== "company_admin") || changes.status === "deactivated")) {
+            const admins = (await orm().User.where({ workspaceId, role: "company_admin" }).all()).filter((u) => u.status === "active");
+            if (admins.length <= 1) return res.status(409).json({ message: "A company must keep at least one active admin", code: "last_admin" });
         }
-        if (!Object.keys(changes).length) return res.status(400).json({ message: "Nothing to update" });
 
-        await orm().User.where({ id: user.id }).update(changes);
-
-        await writeAudit(orm(), {
-            workspaceId,
-            actorType: "user",
-            actorUserId: req.user.id,
-            action: "team.member_updated",
-            targetType: "user",
-            targetId: user.id,
-            metadata: { changedFields: Object.keys(changes) },
-            ip: req.ip ?? null,
-            userAgent: req.headers["user-agent"] ?? null,
+        await db.transaction(async (tx) => {
+            if (Object.keys(changes).length) await tx.orm.public.User.where({ id: user.id }).update(changes);
+            if (locationIds !== undefined) {
+                await tx.orm.public.UserLocationAccess.where({ userId: user.id }).delete();
+                for (const locationId of [...new Set(locationIds)]) await tx.orm.public.UserLocationAccess.create({ userId: user.id, locationId, workspaceId });
+            }
+            await writeAudit(tx.orm.public, {
+                workspaceId,
+                actorType: "user",
+                actorUserId: req.user.id,
+                action: "team.member_updated",
+                targetType: "user",
+                targetId: user.id,
+                metadata: { changedFields: [...Object.keys(changes), ...(locationIds !== undefined ? ["allowedLocationIds"] : [])] },
+                ip: req.ip ?? null,
+                userAgent: req.headers["user-agent"] ?? null,
+            });
         });
 
         return res.status(200).json({ message: "Team member updated" });
@@ -331,17 +373,19 @@ export const listLocations = async (req, res) => {
 export const createLocation = async (req, res) => {
     try {
         const workspaceId = req.user.workspaceId;
-        const { name, timezone = "UTC", currency = "USD", externalIds } = req.body ?? {};
-        if (!name) return res.status(400).json({ message: "name is required" });
+        const { name, timezone, currency, externalIds } = req.body ?? {};
+        const workspace = await orm().Workspace.where({ id: workspaceId }).first();
+        if (!name || !String(name).trim()) return res.status(400).json({ message: "name is required" });
+        const tz = timezone || workspace?.timezone || "UTC";
+        if (!isValidTimeZone(tz)) return res.status(400).json({ message: "timezone must be an IANA name such as Asia/Dubai" });
+        const cur = String(currency || workspace?.reportingCurrency || "USD").toUpperCase();
+        if (!/^[A-Z]{3}$/.test(cur)) return res.status(400).json({ message: "currency must be a 3-letter ISO code" });
+        if (externalIds !== undefined && externalIds !== null && (typeof externalIds !== "object" || Array.isArray(externalIds))) {
+            return res.status(400).json({ message: 'externalIds must be an object, e.g. { "zenoti": "<center id>" }' });
+        }
 
-        const location = await orm().Location.create({
-            workspaceId,
-            name: name.trim(),
-            timezone,
-            currency: currency.toUpperCase(),
-            externalIds: externalIds ?? null,
-        });
-
+        const location = await orm().Location.create({ workspaceId, name: String(name).trim(), timezone: tz, currency: cur, externalIds: externalIds ?? null });
+        await writeAudit(orm(), { workspaceId, actorType: "user", actorUserId: req.user.id, action: "location.created", targetType: "location", targetId: location.id, ip: req.ip ?? null, userAgent: req.headers["user-agent"] ?? null });
         return res.status(201).json({ data: location });
     } catch (error) {
         console.error("createLocation:", error.message);
@@ -358,8 +402,17 @@ export const updateLocation = async (req, res) => {
         const allowed = ["name", "timezone", "currency", "externalIds", "isActive"];
         const changes = Object.fromEntries(Object.entries(req.body ?? {}).filter(([k]) => allowed.includes(k)));
         if (!Object.keys(changes).length) return res.status(400).json({ message: "Nothing to update" });
+        if ("timezone" in changes && !isValidTimeZone(changes.timezone)) return res.status(400).json({ message: "timezone must be an IANA name" });
+        if ("currency" in changes) {
+            changes.currency = String(changes.currency).toUpperCase();
+            if (!/^[A-Z]{3}$/.test(changes.currency)) return res.status(400).json({ message: "currency must be a 3-letter ISO code" });
+        }
+        if ("isActive" in changes && typeof changes.isActive !== "boolean") return res.status(400).json({ message: "isActive must be true or false" });
 
         await orm().Location.where({ id: location.id }).update(changes);
+        await writeAudit(orm(), { workspaceId, actorType: "user", actorUserId: req.user.id, action: "location.updated", targetType: "location", targetId: location.id, metadata: { changedFields: Object.keys(changes) }, ip: req.ip ?? null, userAgent: req.headers["user-agent"] ?? null });
+        // a location's timezone sets its day boundaries
+        if ("timezone" in changes && changes.timezone !== location.timezone) await requestRebuild(workspaceId, "location_timezone_changed");
         return res.status(200).json({ message: "Location updated" });
     } catch (error) {
         return res.status(500).json({ message: "Internal server error" });
@@ -371,8 +424,11 @@ export const deleteLocation = async (req, res) => {
         const workspaceId = req.user.workspaceId;
         const location = await orm().Location.where({ id: req.params.id, workspaceId }).first();
         if (!location) return res.status(404).json({ message: "Location not found" });
-
+        const used = (await orm().Order.where({ workspaceId, locationId: location.id }).first()) || (await orm().Booking.where({ workspaceId, locationId: location.id }).first());
+        if (used) return res.status(409).json({ message: "This location has orders or bookings. Deactivate it instead (isActive: false).", code: "location_has_data" });
+        await orm().UserLocationAccess.where({ locationId: location.id }).delete();
         await orm().Location.where({ id: location.id }).delete();
+        await writeAudit(orm(), { workspaceId, actorType: "user", actorUserId: req.user.id, action: "location.deleted", targetType: "location", targetId: location.id, ip: req.ip ?? null, userAgent: req.headers["user-agent"] ?? null });
         return res.status(204).end();
     } catch (error) {
         return res.status(500).json({ message: "Internal server error" });
@@ -382,6 +438,33 @@ export const deleteLocation = async (req, res) => {
 // ────────────────────────────────────────
 // Channel Mapping Rules
 // ────────────────────────────────────────
+
+const RULE_FIELDS = new Set(["source", "medium", "campaign", "term", "content", "referrer", "referrerHost", "landingPage", "gclid", "fbclid", "ttclid", "msclkid"]);
+
+function validateRule({ priority, match, channel }, partial = false) {
+    if (!partial || priority !== undefined) {
+        if (!Number.isInteger(priority) || priority < 0 || priority > 10000) return "priority must be a whole number from 0 to 10000";
+    }
+    if (!partial || match !== undefined) {
+        if (!match || typeof match !== "object" || Array.isArray(match) || !Object.keys(match).length) return "match must be an object such as { \"source\": \"newsletter\" }";
+        for (const [field, value] of Object.entries(match)) {
+            if (!RULE_FIELDS.has(field)) return `match field "${field}" is not supported (use: ${[...RULE_FIELDS].join(", ")})`;
+            const ok = typeof value === "string" || (value && typeof value === "object" && ("equals" in value || "contains" in value || "present" in value));
+            if (!ok) return `match.${field} must be text, or { equals | contains | present }`;
+        }
+    }
+    if (!partial || channel !== undefined) {
+        if (typeof channel !== "string" || !/^[a-z0-9_\-]{1,64}$/i.test(channel)) return "channel must be 1-64 letters, numbers, - or _";
+    }
+    return null;
+}
+
+const rulesChanged = async (req, action, id) => {
+    const workspaceId = req.user.workspaceId;
+    invalidateTrackingCache(workspaceId);
+    await scheduleRebuildIfNeeded(workspaceId, ["channelRules"], req.user.id);
+    return writeAudit(orm(), { workspaceId, actorType: "user", actorUserId: req.user.id, action, targetType: "channel_rule", targetId: id, ip: req.ip ?? null, userAgent: req.headers["user-agent"] ?? null });
+};
 
 export const listChannelMappingRules = async (req, res) => {
     try {
@@ -398,12 +481,11 @@ export const createChannelMappingRule = async (req, res) => {
     try {
         const workspaceId = req.user.workspaceId;
         const { priority, match, channel, isActive = true } = req.body ?? {};
-        if (priority === undefined) return res.status(400).json({ message: "priority is required" });
-        if (!match || typeof match !== "object") return res.status(400).json({ message: "match must be an object" });
-        if (!channel) return res.status(400).json({ message: "channel is required" });
-
-        const rule = await orm().ChannelMappingRule.create({ workspaceId, priority, match, channel, isActive });
-        return res.status(201).json({ data: rule });
+        const problem = validateRule({ priority, match, channel });
+        if (problem) return res.status(400).json({ message: problem });
+        const rule = await orm().ChannelMappingRule.create({ workspaceId, priority, match, channel: channel.toLowerCase(), isActive: isActive !== false });
+        await rulesChanged(req, "channel_rule.created", rule.id);
+        return res.status(201).json({ data: rule, message: "Rule saved. Attribution is being recalculated with it." });
     } catch (error) {
         return res.status(500).json({ message: "Internal server error" });
     }
@@ -414,13 +496,15 @@ export const updateChannelMappingRule = async (req, res) => {
         const workspaceId = req.user.workspaceId;
         const rule = await orm().ChannelMappingRule.where({ id: req.params.id, workspaceId }).first();
         if (!rule) return res.status(404).json({ message: "Rule not found" });
-
         const allowed = ["priority", "match", "channel", "isActive"];
         const changes = Object.fromEntries(Object.entries(req.body ?? {}).filter(([k]) => allowed.includes(k)));
         if (!Object.keys(changes).length) return res.status(400).json({ message: "Nothing to update" });
-
+        const problem = validateRule(changes, true);
+        if (problem) return res.status(400).json({ message: problem });
+        if (changes.channel) changes.channel = changes.channel.toLowerCase();
         await orm().ChannelMappingRule.where({ id: rule.id }).update(changes);
-        return res.status(200).json({ message: "Rule updated" });
+        await rulesChanged(req, "channel_rule.updated", rule.id);
+        return res.status(200).json({ message: "Rule updated. Attribution is being recalculated." });
     } catch (error) {
         return res.status(500).json({ message: "Internal server error" });
     }
@@ -432,6 +516,7 @@ export const deleteChannelMappingRule = async (req, res) => {
         const rule = await orm().ChannelMappingRule.where({ id: req.params.id, workspaceId }).first();
         if (!rule) return res.status(404).json({ message: "Rule not found" });
         await orm().ChannelMappingRule.where({ id: rule.id }).delete();
+        await rulesChanged(req, "channel_rule.deleted", rule.id);
         return res.status(204).end();
     } catch (error) {
         return res.status(500).json({ message: "Internal server error" });
@@ -441,6 +526,30 @@ export const deleteChannelMappingRule = async (req, res) => {
 // ────────────────────────────────────────
 // Outbound Webhooks
 // ────────────────────────────────────────
+
+const PRIVATE_HOST = /^(localhost|.*\.local|.*\.internal|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|\[?::1\]?$|\[?f[cd][0-9a-f]{2}:)/i;
+
+/** Webhook URLs must be public https endpoints (no internal addresses: prevents SSRF). */
+function webhookUrlProblem(raw) {
+    let u;
+    try {
+        u = new URL(String(raw));
+    } catch {
+        return "url is not a valid URL";
+    }
+    const devLocal = ENV.NODE_ENV !== "production" && ["localhost", "127.0.0.1"].includes(u.hostname);
+    if (u.protocol !== "https:" && !devLocal) return "url must use https";
+    if (PRIVATE_HOST.test(u.hostname) && !devLocal) return "url must be a public address";
+    if (u.username || u.password) return "url must not contain credentials";
+    return null;
+}
+
+function eventTypesProblem(list) {
+    if (!Array.isArray(list) || !list.length) return "eventTypes must be a non-empty array";
+    const allowed = new Set([...WEBHOOK_EVENT_TYPES.filter((t) => t !== "ping"), "order.created", "*"]);
+    const bad = list.filter((t) => !allowed.has(t));
+    return bad.length ? `Unknown event types: ${bad.join(", ")}. Use: ${[...allowed].join(", ")}` : null;
+}
 
 export const listWebhookEndpoints = async (req, res) => {
     try {
@@ -459,14 +568,12 @@ export const createWebhookEndpoint = async (req, res) => {
         const workspaceId = req.user.workspaceId;
         const { url, eventTypes } = req.body ?? {};
         if (!url) return res.status(400).json({ message: "url is required" });
-        if (!Array.isArray(eventTypes) || eventTypes.length === 0) {
-            return res.status(400).json({ message: "eventTypes must be a non-empty array" });
-        }
+        const urlProblem = webhookUrlProblem(url);
+        if (urlProblem) return res.status(400).json({ message: urlProblem });
+        const typesProblem = eventTypesProblem(eventTypes);
+        if (typesProblem) return res.status(400).json({ message: typesProblem });
 
-        // Validate URL
-        try { new URL(url); } catch { return res.status(400).json({ message: "url is not a valid URL" }); }
-
-        const signingSecret = crypto.randomBytes(32).toString("hex");
+        const signingSecret = `whsec_${crypto.randomBytes(32).toString("hex")}`;
         // Encrypt signing secret at rest with AES-256-GCM
         const signingSecretEnc = encryptSecret(signingSecret);
 
@@ -478,6 +585,7 @@ export const createWebhookEndpoint = async (req, res) => {
             isActive: true,
         });
 
+        await writeAudit(orm(), { workspaceId, actorType: "user", actorUserId: req.user.id, action: "webhook.created", targetType: "webhook_endpoint", targetId: hook.id, metadata: { eventTypes }, ip: req.ip ?? null, userAgent: req.headers["user-agent"] ?? null });
         return res.status(201).json({
             id: hook.id,
             url: hook.url,
@@ -499,11 +607,24 @@ export const updateWebhookEndpoint = async (req, res) => {
         if (!hook) return res.status(404).json({ message: "Webhook endpoint not found" });
 
         const changes = {};
-        if (typeof req.body?.isActive === "boolean") changes.isActive = req.body.isActive;
-        if (Array.isArray(req.body?.eventTypes)) changes.eventTypes = req.body.eventTypes;
+        if (typeof req.body?.isActive === "boolean") {
+            changes.isActive = req.body.isActive;
+            if (req.body.isActive) Object.assign(changes, { consecutiveFailures: 0, disabledReason: null });
+        }
+        if (req.body?.eventTypes !== undefined) {
+            const typesProblem = eventTypesProblem(req.body.eventTypes);
+            if (typesProblem) return res.status(400).json({ message: typesProblem });
+            changes.eventTypes = req.body.eventTypes;
+        }
+        if (req.body?.url !== undefined) {
+            const urlProblem = webhookUrlProblem(req.body.url);
+            if (urlProblem) return res.status(400).json({ message: urlProblem });
+            changes.url = req.body.url;
+        }
         if (!Object.keys(changes).length) return res.status(400).json({ message: "Nothing to update" });
 
         await orm().WebhookEndpoint.where({ id: hook.id }).update(changes);
+        await writeAudit(orm(), { workspaceId, actorType: "user", actorUserId: req.user.id, action: "webhook.updated", targetType: "webhook_endpoint", targetId: hook.id, metadata: { changedFields: Object.keys(changes) }, ip: req.ip ?? null, userAgent: req.headers["user-agent"] ?? null });
         return res.status(200).json({ message: "Webhook endpoint updated" });
     } catch (error) {
         return res.status(500).json({ message: "Internal server error" });
@@ -515,7 +636,13 @@ export const deleteWebhookEndpoint = async (req, res) => {
         const workspaceId = req.user.workspaceId;
         const hook = await orm().WebhookEndpoint.where({ id: req.params.id, workspaceId }).first();
         if (!hook) return res.status(404).json({ message: "Webhook endpoint not found" });
+        try {
+            await orm().WebhookDelivery.where({ endpointId: hook.id }).delete();
+        } catch {
+            /* delivery log not migrated */
+        }
         await orm().WebhookEndpoint.where({ id: hook.id }).delete();
+        await writeAudit(orm(), { workspaceId, actorType: "user", actorUserId: req.user.id, action: "webhook.deleted", targetType: "webhook_endpoint", targetId: hook.id, ip: req.ip ?? null, userAgent: req.headers["user-agent"] ?? null });
         return res.status(204).end();
     } catch (error) {
         return res.status(500).json({ message: "Internal server error" });
@@ -534,28 +661,20 @@ export const getAuditLog = async (req, res) => {
             return res.status(200).json({ data: [], available: false, pagination: { page: 1, limit: 0, total: 0, pages: 0 } });
         }
         const workspaceId = req.user.workspaceId;
-        const page = Math.max(1, parseInt(req.query.page) || 1);
-        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 25));
-        const offset = (page - 1) * limit;
-
-        const countResult = await auditStore
-            .where({ workspaceId })
-            .aggregate((agg) => ({ total: agg.count() }));
-        const total = countResult?.total || 0;
-
-        const data = await auditStore
-            .where({ workspaceId })
-            .orderBy((l) => l.createdAt.desc())
-            .limit(limit)
-            .offset(offset)
-            .all();
-
-        return res.status(200).json({
-            data,
-            pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-        });
+        let rows = await auditStore.where({ workspaceId }).all();
+        // filters: actorType (user | platform_admin | api_key | system), action prefix (e.g. "auth."), from/to
+        if (req.query.actorType) rows = rows.filter((r) => r.actorType === req.query.actorType);
+        if (req.query.action) rows = rows.filter((r) => String(r.action).startsWith(String(req.query.action)));
+        if (req.query.from) rows = rows.filter((r) => new Date(r.createdAt) >= new Date(req.query.from));
+        if (req.query.to) rows = rows.filter((r) => new Date(r.createdAt) <= new Date(req.query.to));
+        const users = new Map((await orm().User.all()).filter((u) => rows.some((r) => r.actorUserId === u.id)).map((u) => [u.id, u.name]));
+        rows = rows.map((r) => ({ ...r, actorName: r.actorUserId ? users.get(r.actorUserId) ?? null : null }));
+        sortDesc(rows, "createdAt");
+        if (wantsCsv(req)) return sendCsv(res, "audit-log.csv", rows, ["createdAt", "actorType", "actorName", "action", "targetType", "targetId", "reason", "ip"]);
+        return res.status(200).json(paginate(rows, req, "createdAt"));
     } catch (error) {
         console.error("getAuditLog:", error.message);
         return res.status(500).json({ message: "Internal server error" });
     }
 };
+

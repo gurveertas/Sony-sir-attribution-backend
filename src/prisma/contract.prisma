@@ -6,6 +6,7 @@
 
 enum WorkspaceStatus {
   @@type("pg/text@1")
+  pending   = "pending"
   active    = "active"
   suspended = "suspended"
   closed    = "closed"
@@ -110,6 +111,11 @@ model Workspace {
   lookbackOverrides       Json?
   consentMode             ConsentMode         @default(off)
   rawRetentionMonths      Int                 @default(13)
+  taxIncludedInRevenue    Boolean             @default(false)
+  rollupsBuiltAt          TimestamptzString?
+  /// changes on every conversion write; rollups are fresh only when rollupsBuiltToken equals it
+  rollupsDataToken        String?
+  rollupsBuiltToken       String?
   plan                    String?
   approvedAt              TimestamptzString?
   approvedBy              String?
@@ -135,6 +141,14 @@ model Workspace {
   bookings                Booking[]
   attributionCredits      AttributionCredit[]
   rawEvents               RawEvent[]
+  auditLogs               AuditLog[]
+  adAccounts              AdAccount[]
+  adSpend                 AdSpend[]
+  webhookDeliveries       WebhookDelivery[]
+  idempotencyKeys         IdempotencyKey[]
+  dailyRollups            DailyRollup[]
+  attributionRollups      DailyAttributionRollup[]
+  rollupDirtyDays         RollupDirtyDay[]
 }
 
 model User {
@@ -148,6 +162,8 @@ model User {
   status            UserStatus         @default(active)
   emailVerifiedAt   TimestamptzString?
   twoFactorEnabled  Boolean            @default(false)
+  twoFactorSecretEnc Bytes?
+  passwordChangedAt TimestamptzString?
   failedLoginCount  Int                @default(0)
   lockedUntil       TimestamptzString?
   lastLoginAt       TimestamptzString?
@@ -363,6 +379,7 @@ enum BookingStatus {
 enum MatchMethod {
   @@type("pg/text@1")
   token      = "token"
+  visitor_id = "visitor_id"
   click_id   = "click_id"
   email      = "email"
   phone      = "phone"
@@ -432,6 +449,7 @@ model Touch {
   ga              String?
   ip              String?
   userAgent       String?
+  isTest          Boolean            @default(false)
   touchedAt       TimestamptzString  @default(now())
   createdAt       TimestamptzString  @default(now())
 
@@ -440,6 +458,8 @@ model Touch {
   @@index([workspaceId])
   @@index([visitorId])
   @@index([touchedAt])
+  @@index([workspaceId, gclid])
+  @@index([workspaceId, fbclid])
 }
 
 model Customer {
@@ -456,6 +476,7 @@ model Customer {
   mergedIntoId    String?
   mergedInto      Customer?          @relation("CustomerMerge", fields: [mergedIntoId], references: [id])
   mergedFrom      Customer[]         @relation("CustomerMerge")
+  erasedAt        TimestamptzString?
   createdAt       TimestamptzString  @default(now())
   updatedAt       temporal.updatedAtString()
 
@@ -479,6 +500,7 @@ model CheckoutSession {
   expiresAt      TimestamptzString
   consumedAt     TimestamptzString?
   consumedOrderId String?
+  consumedBookingId String?
   createdAt      TimestamptzString  @default(now())
 
   @@index([workspaceId])
@@ -496,6 +518,8 @@ model Order {
   externalId      String?
   connectorId     String?
   connector       Connector?         @relation(fields: [connectorId], references: [id])
+  bookingId       String?
+  booking         Booking?           @relation(fields: [bookingId], references: [id])
   status          OrderStatus        @default(paid)
   grossMinorUnits BigInt
   discountMinorUnits BigInt          @default(0)
@@ -507,7 +531,9 @@ model Order {
   reportingCurrency VarChar(3)?
   checkoutToken   String?
   matchMethod     MatchMethod        @default(none)
+  attributionReason String?
   isNewCustomer   Boolean            @default(false)
+  isTest          Boolean            @default(false)
   idempotencyKey  String?
   rawPayload      Json?
   orderedAt       TimestamptzString
@@ -522,6 +548,7 @@ model Order {
   @@index([workspaceId])
   @@index([customerId])
   @@index([orderedAt])
+  @@index([bookingId])
 }
 
 model OrderItem {
@@ -574,9 +601,12 @@ model Booking {
   currency        VarChar(3)
   appointmentStartAt TimestamptzString
   appointmentEndAt TimestamptzString?
+  bookedAt        TimestamptzString?
   checkoutToken   String?
   matchMethod     MatchMethod        @default(none)
+  attributionReason String?
   isNewCustomer   Boolean            @default(false)
+  isTest          Boolean            @default(false)
   idempotencyKey  String?
   rawPayload      Json?
   createdAt       TimestamptzString  @default(now())
@@ -584,6 +614,7 @@ model Booking {
 
   statusHistory   BookingStatusHistory[]
   attributionCredits AttributionCredit[]
+  orders          Order[]
 
   @@unique([workspaceId, externalId])
   @@index([workspaceId])
@@ -616,9 +647,13 @@ model AttributionCredit {
   share       Decimal              // 0.0 to 1.0
   amountMinorUnits BigInt
   currency    VarChar(3)
+  channel     String?              // channel resolved at attribution time ("direct_unknown" when unattributed)
+  campaign    String?
+  reasonCode  String?              // set on unattributed rows: why no source was found
   createdAt   TimestamptzString    @default(now())
 
   @@index([workspaceId])
+  @@index([workspaceId, model])
   @@index([orderId])
   @@index([bookingId])
   @@index([touchId])
@@ -636,12 +671,241 @@ model RawEvent {
   status      RawEventStatus     @default(pending)
   error       String?
   replayCount Int                @default(0)
+  attempts    Int                @default(0)
+  nextAttemptAt TimestamptzString?
+  idempotencyKey String?
+  isTest      Boolean            @default(false)
   processedAt TimestamptzString?
   receivedAt  TimestamptzString  @default(now())
 
   @@index([workspaceId])
   @@index([status])
+  @@index([workspaceId, receivedAt])
   @@index([connectorId])
+}
+
+// ──────────────────────────────────────────
+// D. Accountability, delivery, idempotency
+// ──────────────────────────────────────────
+
+/// D9 — logins, key creation, settings changes, platform-admin access. Visible to the company.
+model AuditLog {
+  id          String             @id @default(uuid())
+  workspaceId String?
+  workspace   Workspace?         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actorType   ActorType
+  actorUserId String?
+  action      String
+  targetType  String?
+  targetId    String?
+  reason      String?
+  metadata    Json?
+  ip          String?
+  userAgent   String?
+  createdAt   TimestamptzString  @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([action])
+}
+
+/// Stored response for an Idempotency-Key on any /v1 write, so a retried request returns the first answer.
+model IdempotencyKey {
+  id           String             @id @default(uuid())
+  workspaceId  String
+  workspace    Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  key          String
+  route        String
+  requestHash  String
+  statusCode   Int
+  responseBody Json
+  createdAt    TimestamptzString  @default(now())
+
+  @@unique([workspaceId, key])
+}
+
+enum WebhookDeliveryStatus {
+  @@type("pg/text@1")
+  pending   = "pending"
+  succeeded = "succeeded"
+  failed    = "failed"
+}
+
+/// Outbound webhook delivery log (Settings -> Webhooks -> delivery log). Durable retries.
+model WebhookDelivery {
+  id             String                 @id @default(uuid())
+  workspaceId    String
+  workspace      Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  endpointId     String
+  eventId        String
+  eventType      String
+  payload        Json
+  status         WebhookDeliveryStatus  @default(pending)
+  attempts       Int                    @default(0)
+  responseStatus Int?
+  error          String?
+  nextAttemptAt  TimestamptzString?
+  deliveredAt    TimestamptzString?
+  createdAt      TimestamptzString      @default(now())
+
+  @@index([workspaceId, createdAt])
+  @@index([endpointId])
+  @@index([status])
+}
+
+// ──────────────────────────────────────────
+// E. Ad spend, FX, metric rollups (D7, D8)
+// ──────────────────────────────────────────
+
+enum AdPlatform {
+  @@type("pg/text@1")
+  meta   = "meta"
+  google = "google"
+  other  = "other"
+}
+
+model AdAccount {
+  id                String             @id @default(uuid())
+  workspaceId       String
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  platform          AdPlatform
+  externalAccountId String
+  name              String
+  timezone          String?
+  currency          VarChar(3)?
+  status            ConnectorStatus    @default(pending)
+  credentialsEnc    Bytes?
+  lastSyncedAt      TimestamptzString?
+  lastError         String?
+  createdAt         TimestamptzString  @default(now())
+  updatedAt         temporal.updatedAtString()
+
+  spend             AdSpend[]
+
+  @@unique([workspaceId, platform, externalAccountId])
+  @@index([workspaceId])
+}
+
+/// D7 — daily spend by campaign. `date` is the ad account's local day (YYYY-MM-DD).
+model AdSpend {
+  id              String             @id @default(uuid())
+  workspaceId     String
+  workspace       Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  adAccountId     String?
+  adAccount       AdAccount?         @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  locationId      String?
+  platform        AdPlatform
+  channel         String
+  date            VarChar(10)
+  campaignId      String?
+  campaignName    String
+  adSetName       String?
+  adName          String?
+  spendMinorUnits BigInt
+  currency        VarChar(3)
+  impressions     Int                @default(0)
+  clicks          Int                @default(0)
+  source          String             @default("api")
+  dedupeKey       String
+  createdAt       TimestamptzString  @default(now())
+  updatedAt       temporal.updatedAtString()
+
+  @@unique([workspaceId, dedupeKey])
+  @@index([workspaceId, date])
+}
+
+/// Daily FX snapshot: 1 unit of `base` = `rate` units of `quote`.
+model FxRate {
+  id        String             @id @default(uuid())
+  date      VarChar(10)
+  base      VarChar(3)
+  quote     VarChar(3)
+  rate      Decimal
+  source    String             @default("manual")
+  createdAt TimestamptzString  @default(now())
+
+  @@unique([date, base, quote])
+}
+
+/// D8 — model-independent daily totals (company/location local day), in the reporting currency.
+model DailyRollup {
+  id                  String             @id @default(uuid())
+  workspaceId         String
+  workspace           Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  day                 VarChar(10)
+  locationId          String?
+  isNewCustomer       Boolean
+  orders              Int                @default(0)
+  grossMinorUnits     BigInt             @default(0)
+  discountMinorUnits  BigInt             @default(0)
+  taxMinorUnits       BigInt             @default(0)
+  refundMinorUnits    BigInt             @default(0)
+  matchedNetMinorUnits BigInt            @default(0)
+  bookingsCreated     Int                @default(0)
+  bookedValueMinorUnits BigInt           @default(0)
+  currency            VarChar(3)
+  builtAt             TimestamptzString  @default(now())
+
+  @@index([workspaceId, day])
+}
+
+/// D8 — local days whose rollups must be recomputed. Insert-only from writers (safe with several
+/// API instances); the refresh job deletes the rows it folded in.
+model RollupDirtyDay {
+  id          String             @id @default(uuid())
+  workspaceId String
+  workspace   Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  day         VarChar(10)
+  createdAt   TimestamptzString  @default(now())
+
+  @@index([workspaceId, day])
+}
+
+enum BackgroundJobStatus {
+  queued
+  running
+  done
+  dead
+}
+
+/// Durable background jobs (attribution re-runs, rollup rebuilds, ad spend syncs). A job left
+/// unfinished by a restart or a crashed instance is picked up again by any instance.
+model BackgroundJob {
+  id            String               @id @default(uuid())
+  workspaceId   String?
+  type          String
+  payload       Json?
+  dedupeKey     String
+  status        BackgroundJobStatus  @default(queued)
+  attempts      Int                  @default(0)
+  nextAttemptAt TimestamptzString?
+  lockedBy      String?
+  lockedAt      TimestamptzString?
+  lastError     String?
+  createdAt     TimestamptzString    @default(now())
+  finishedAt    TimestamptzString?
+
+  @@index([status, nextAttemptAt])
+  @@index([dedupeKey])
+}
+
+/// D8 — attributed revenue by day, location, channel, campaign and model.
+model DailyAttributionRollup {
+  id                     String               @id @default(uuid())
+  workspaceId            String
+  workspace              Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  day                    VarChar(10)
+  locationId             String?
+  model                  AttributionModelEnum
+  channel                String
+  campaign               String
+  isNewCustomer          Boolean
+  creditedOrders         Decimal
+  attributedMinorUnits   BigInt
+  refundMinorUnits       BigInt               @default(0)
+  currency               VarChar(3)
+  builtAt                TimestamptzString    @default(now())
+
+  @@index([workspaceId, model, day])
 }
 
 model Industry{

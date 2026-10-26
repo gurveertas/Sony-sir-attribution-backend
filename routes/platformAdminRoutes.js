@@ -16,6 +16,7 @@ import {
   deleteUser,
 } from "../controllers/platformAdminController.js";
 import { getWorkspaceDashboard } from "../controllers/platformAdminDashboardController.js";
+import * as tools from "../controllers/platformToolsController.js";
 
 import { startSupportSession, endSupportSession, listMySupportSessions } from "../controllers/supportAccessController.js";
 import { protectRoute, requireRole } from "../middlewares/protectRoute.js";
@@ -31,6 +32,18 @@ router.post("/support-sessions/:id/end", endSupportSession);
 router.get("/support-sessions", listMySupportSessions);
 
 router.get("/dashboard", getPlatformDashboard);
+router.get("/health", tools.getPlatformHealth);
+router.post("/jobs/:jobId/retry", tools.retryBackgroundJob);
+router.get("/approvals", tools.listApprovals);
+router.get("/audit-log", tools.listPlatformAuditLog);
+router.get("/fx-rates", tools.listFxRates);
+router.post("/fx-rates", tools.uploadFxRates);
+router.post("/workspaces", tools.createWorkspaceForCompany);
+router.post("/workspaces/:workspaceId/replay", tools.replayWorkspaceEvents);
+router.post("/workspaces/:workspaceId/rerun-attribution", tools.rerunWorkspaceAttribution);
+router.post("/workspaces/:workspaceId/rebuild-rollups", tools.rebuildWorkspaceRollups);
+router.delete("/workspaces/:workspaceId/data", tools.deleteCompanyData);
+router.post("/api-keys/:keyId/rotate", tools.rotateKeyForCompany);
 
 router.get("/workspaces", listWorkspaces);
 router.get("/workspaces/:workspaceId", getWorkspaceDetails);

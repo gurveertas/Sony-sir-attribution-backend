@@ -22,4 +22,6 @@ router.delete('/:id', revokeApiKey);
 
 router.post('/rotate', rotateApiKey);
 
+router.post('/:id/rotate', rotateApiKey);
+
 export default router;
