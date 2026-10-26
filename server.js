@@ -39,6 +39,7 @@ const allowedOrigins = [
     ...(process.env.EXTRA_CORS_ORIGINS ? process.env.EXTRA_CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean) : []),
     "https://asf-tas.vercel.app",
     "https://asftas.vercel.app",
+    "http://localhost:5173",
     ...(ENV.NODE_ENV === "production" ? [] : ["http://localhost:3000", "http://localhost:5173", "http://localhost:5175"]),
 ];
 
