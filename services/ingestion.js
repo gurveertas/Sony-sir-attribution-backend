@@ -302,6 +302,16 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
         // include them. Backfill the existing order's identity instead of treating the
         // duplicate as a reason to discard the newly supplied customer information.
         let linkedCustomerId = existing.customerId ?? null;
+        const existingRaw = existing.rawPayload && typeof existing.rawPayload === "object" ? existing.rawPayload : {};
+        const rawPayload = {
+            ...existingRaw,
+            ...(input.visitorId ? { visitorId: input.visitorId } : {}),
+            ...(Object.keys(input.clickIds).length ? { clickIds: { ...(existingRaw.clickIds ?? {}), ...input.clickIds } } : {}),
+        };
+        const hasNewAttributionIds =
+            (input.visitorId && existingRaw.visitorId !== input.visitorId) ||
+            (input.checkoutToken && existing.checkoutToken !== input.checkoutToken) ||
+            (Object.keys(input.clickIds).length > 0 && JSON.stringify(existingRaw.clickIds ?? {}) !== JSON.stringify(rawPayload.clickIds));
         if (!linkedCustomerId) {
             let customer = null;
             if (input.email || input.phone || input.customerExternalId) {
@@ -323,12 +333,22 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
             }
             if (customer) {
                 linkedCustomerId = customer.id;
-                await client.transaction(async (tx) => {
-                    await tenantDb(tx, workspaceId).Order.where({ id: existing.id }).update({ customerId: customer.id });
-                    if (isPaidOrder(existing.status)) await recomputeNewVsReturning(tx, workspaceId, customer.id);
-                });
-                if (input.visitorId) await linkVisitorToCustomer(client, workspaceId, input.visitorId, customer.id);
             }
+        }
+        if (linkedCustomerId && input.visitorId) await linkVisitorToCustomer(client, workspaceId, input.visitorId, linkedCustomerId);
+        if (linkedCustomerId !== existing.customerId || hasNewAttributionIds) {
+            await client.transaction(async (tx) => {
+                const updates = {};
+                if (linkedCustomerId !== existing.customerId) updates.customerId = linkedCustomerId;
+                if (hasNewAttributionIds) {
+                    updates.rawPayload = rawPayload;
+                    if (input.checkoutToken) updates.checkoutToken = input.checkoutToken;
+                }
+                await tenantDb(tx, workspaceId).Order.where({ id: existing.id }).update(updates);
+                if (linkedCustomerId && linkedCustomerId !== existing.customerId && isPaidOrder(existing.status)) {
+                    await recomputeNewVsReturning(tx, workspaceId, linkedCustomerId);
+                }
+            });
         }
         const freshExisting = linkedCustomerId
             ? await t.Order.where({ id: existing.id }).first()
