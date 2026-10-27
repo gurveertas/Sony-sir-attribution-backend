@@ -4,10 +4,14 @@
  * (Order.fxRateToReporting) and never changes afterwards unless an admin backfills a missing one.
  *
  * Rates live in the FxRate table (date, base, quote, rate), loaded by an admin upload or a feed.
- * Lookup: exact date, else the most recent earlier rate within 7 days, else the inverse pair.
+ * Lookup prefers a direct/inverse pair, then derives a cross rate through the daily EUR reference.
+ * Rates may fall back to the most recent earlier date within 7 days.
  */
 
 const MAX_STALENESS_DAYS = 7;
+const RATE_HISTORY_DAYS = MAX_STALENESS_DAYS * 2;
+const FX_PROVIDER_URL = "https://api.frankfurter.dev/v1";
+const AUTOMATED_RATE_SOURCE = "frankfurter";
 
 const addDaysIso = (day, n) => {
     const d = new Date(`${day}T00:00:00Z`);
@@ -40,6 +44,26 @@ export async function findRate(orm, day, base, quote) {
         const inverse = await orm.FxRate.where({ date: d, base: q, quote: b }).first();
         if (inverse && Number(inverse.rate) > 0) return 1 / Number(inverse.rate);
     }
+
+    for (let i = 0; i <= MAX_STALENESS_DAYS; i++) {
+        const d = addDaysIso(day, -i);
+
+        const eurToBase = b === "EUR"
+            ? 1
+            : Number((await orm.FxRate.where({ date: d, base: "EUR", quote: b }).first())?.rate ?? 0);
+        const baseToEur = b === "EUR"
+            ? 1
+            : Number((await orm.FxRate.where({ date: d, base: b, quote: "EUR" }).first())?.rate ?? 0);
+        const eurToQuote = q === "EUR"
+            ? 1
+            : Number((await orm.FxRate.where({ date: d, base: "EUR", quote: q }).first())?.rate ?? 0);
+        const quoteToEur = q === "EUR"
+            ? 1
+            : Number((await orm.FxRate.where({ date: d, base: q, quote: "EUR" }).first())?.rate ?? 0);
+        const basePerEur = eurToBase > 0 ? eurToBase : baseToEur > 0 ? 1 / baseToEur : 0;
+        const quotePerEur = eurToQuote > 0 ? eurToQuote : quoteToEur > 0 ? 1 / quoteToEur : 0;
+        if (basePerEur > 0 && quotePerEur > 0) return quotePerEur / basePerEur;
+    }
     return null;
 }
 
@@ -62,4 +86,81 @@ export async function upsertRates(orm, rates, source = "manual") {
         written++;
     }
     return written;
+}
+
+async function fetchJson(fetchImpl, url) {
+    const response = await fetchImpl(url, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(15_000),
+    });
+    if (!response.ok) throw new Error(`FX provider returned HTTP ${response.status}`);
+    return response.json();
+}
+
+/**
+ * Fetch a rolling two-week ECB reference history through Frankfurter. Storing EUR reference pairs
+ * lets findRate derive any supported cross-currency rate. Only automated rows are refreshed;
+ * manually uploaded rates remain authoritative.
+ */
+export async function syncLatestRates(orm, fetchImpl = globalThis.fetch) {
+    if (typeof fetchImpl !== "function") throw new Error("FX provider fetch is unavailable");
+
+    const today = new Date();
+    const end = today.toISOString().slice(0, 10);
+    today.setUTCDate(today.getUTCDate() - RATE_HISTORY_DAYS);
+    const start = today.toISOString().slice(0, 10);
+    const result = await fetchJson(fetchImpl, `${FX_PROVIDER_URL}/${start}..${end}?base=EUR`);
+    if (
+        result?.base !== "EUR" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(result?.start_date ?? "") ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(result?.end_date ?? "") ||
+        !result.rates ||
+        typeof result.rates !== "object" ||
+        Array.isArray(result.rates)
+    ) {
+        throw new Error("FX provider returned invalid EUR reference rates");
+    }
+
+    const rates = Object.entries(result.rates).flatMap(([date, dailyRates]) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !dailyRates || typeof dailyRates !== "object" || Array.isArray(dailyRates)) {
+            throw new Error("FX provider returned an invalid daily rate entry");
+        }
+        return Object.entries(dailyRates)
+            .filter(([quote]) => /^[A-Z]{3}$/.test(quote) && quote !== "EUR")
+            .map(([quote, value]) => ({ date, base: "EUR", quote, rate: Number(value) }));
+    });
+    if (!rates.length || rates.some((rate) => !Number.isFinite(rate.rate) || rate.rate <= 0)) {
+        throw new Error("FX provider returned no valid currency rates");
+    }
+
+    let written = 0;
+    let preserved = 0;
+    for (const rate of rates) {
+        const existing = await orm.FxRate.where({ date: rate.date, base: rate.base, quote: rate.quote }).first();
+        if (existing && existing.source !== AUTOMATED_RATE_SOURCE) {
+            preserved++;
+            continue;
+        }
+        if (existing && Number(existing.rate) === rate.rate) continue;
+        try {
+            written += await upsertRates(orm, [rate], AUTOMATED_RATE_SOURCE);
+        } catch (error) {
+            if (error?.code !== "23505" && error?.code !== "P2002") throw error;
+            const concurrent = await orm.FxRate.where({ date: rate.date, base: rate.base, quote: rate.quote }).first();
+            if (!concurrent) throw error;
+            if (concurrent.source !== AUTOMATED_RATE_SOURCE) {
+                preserved++;
+                continue;
+            }
+            await orm.FxRate.where({ id: concurrent.id }).update({ rate: rate.rate, source: AUTOMATED_RATE_SOURCE });
+            written++;
+        }
+    }
+    return {
+        startDate: result.start_date,
+        date: result.end_date,
+        currencies: [...new Set(["EUR", ...rates.map((rate) => rate.quote)])].sort(),
+        written,
+        preserved,
+    };
 }

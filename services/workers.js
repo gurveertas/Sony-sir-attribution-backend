@@ -10,6 +10,7 @@
  *   every 10 min rebuild rollups that were never built for a company with data, and refresh rollups
  *               that are behind
  *   every hour  sync ad spend for connected Meta / Google accounts (each account at most every 6 h)
+ *   every day   sync ECB reference FX rates, backfill missing order snapshots, and rebuild rollups
  *   every day   apply data retention
  */
 
@@ -22,6 +23,8 @@ import { reattributeWorkspace } from "./ingestion.js";
 import { applyRetention } from "./privacy.js";
 import { syncAccount, platformConfigured } from "./adPlatforms.js";
 import { writeAudit } from "./audit.js";
+import ENV from "../utils/env.js";
+import { findRate, syncLatestRates } from "./fx.js";
 import "./rollups.js"; // registers the rollup job handlers
 
 const timers = [];
@@ -51,6 +54,43 @@ registerJobHandler("attribution.rerun", async ({ workspaceId, from = null, to = 
 });
 
 registerJobHandler("adspend.sync", ({ workspaceId, accountId }) => syncAccount(workspaceId, accountId));
+
+registerJobHandler("fxrates.sync", async () => {
+    const result = await syncLatestRates(db.orm.public);
+    const backfillFrom = `${result.startDate}T00:00:00.000Z`;
+    const candidates = (
+        await db.orm.public.Order
+            .where((o) => o.fxRateToReporting.isNull())
+            .where((o) => o.orderedAt.gte(backfillFrom))
+            .all()
+    );
+    const supportedCurrencies = new Set(result.currencies);
+    const touched = new Set();
+    let backfilled = 0;
+    for (const order of candidates) {
+        if (backfilled >= 20_000) break;
+        if (
+            !order.reportingCurrency ||
+            order.currency === order.reportingCurrency ||
+            !supportedCurrencies.has(order.currency) ||
+            !supportedCurrencies.has(order.reportingCurrency)
+        ) continue;
+        const rate = await findRate(db.orm.public, String(order.orderedAt).slice(0, 10), order.currency, order.reportingCurrency);
+        if (rate === null) continue;
+        await db.orm.public.Order.where({ id: order.id }).update({ fxRateToReporting: rate });
+        backfilled++;
+        touched.add(order.workspaceId);
+    }
+    for (const workspaceId of touched) await requestRebuild(workspaceId, "fx_rates");
+    console.info("[fx] daily rates synced", { ...result, backfilled });
+    return { ...result, backfilled };
+});
+
+function fxRateSweep() {
+    if (!ENV.FX_AUTO_SYNC_ENABLED) return;
+    const day = new Date().toISOString().slice(0, 10);
+    enqueueJob("fxrates.sync", { day });
+}
 
 async function rollupSweep() {
     if (!rollupsAvailable()) return;
@@ -89,6 +129,8 @@ export function startWorkers() {
     every(30_000, () => pollDueDeliveries(), "webhook poll");
     every(10 * 60_000, rollupSweep, "rollup sweep")();
     every(60 * 60_000, adSpendSweep, "ad spend sweep");
+    every(24 * 60 * 60_000, fxRateSweep, "FX rate sync")();
+    fxRateSweep();
     every(24 * 60 * 60_000, async () => {
         await applyRetention();
         await purgeFinishedJobs(14);

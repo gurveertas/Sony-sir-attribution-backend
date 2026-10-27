@@ -28,7 +28,7 @@ const stats = { enqueued: 0, completed: 0, failed: 0, running: 0, resumed: 0 };
 let paused = false;
 
 /** Job types that must survive a restart. */
-export const DURABLE_JOB_TYPES = new Set(["attribution.rerun", "rollups.rebuild", "rollups.flush", "adspend.sync"]);
+export const DURABLE_JOB_TYPES = new Set(["attribution.rerun", "rollups.rebuild", "rollups.flush", "adspend.sync", "fxrates.sync"]);
 export const INSTANCE_ID = crypto.randomUUID();
 export const LOCK_STALE_MS = 5 * 60_000;
 export const MAX_JOB_ATTEMPTS = 5;

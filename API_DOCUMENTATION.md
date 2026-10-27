@@ -1078,9 +1078,13 @@ Tailored all-in-one endpoint returning the exact data structures rendered on the
 | `PATCH` | `/api/platform-admin/connectors/:connectorId/status` | Change connector health status | Body: `{ status, reason }` |
 | `GET` | `/api/platform-admin/webhooks` | List outbound webhooks platform-wide | `workspaceId`, `page`, `limit` |
 | `PATCH` | `/api/platform-admin/webhooks/:webhookId` | Toggle webhook active state | Body: `{ isActive, reason }` |
+| `GET` | `/api/platform-admin/fx-rates` | List daily FX rates | `date`, `base`, `page`, `limit` |
+| `POST` | `/api/platform-admin/fx-rates` | Upload FX rates; by default, backfills orders missing a snapshot | Body: `{ rates: [{ date, base, quote, rate }], backfill?: boolean }` |
 
 *Note: All platform admin write actions require `reason` with at least 5 characters for auditing.*
 Viewing a company's dashboard requires a `reason` query parameter of at least 5 characters and is recorded in the audit log. The response uses the same metrics and filters as the company dashboard endpoint.
+
+Daily ECB reference rates are also fetched automatically from a single EUR-based feed. Conversions use direct/inverse pairs first and otherwise derive the cross rate through EUR. Existing manual uploads take precedence. Automated rate updates backfill missing order snapshots and rebuild affected rollups; snapshots already present on orders are not changed. Set `FX_AUTO_SYNC_ENABLED=false` to disable the feed, or `DISABLE_BACKGROUND_WORKERS=true` to disable all background workers. Frankfurter's ECB reference rates may differ from actual payment settlement rates.
 
 ---
 
