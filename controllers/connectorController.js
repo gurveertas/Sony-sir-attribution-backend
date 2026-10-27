@@ -100,7 +100,7 @@ export const stripeWebhook = async (req, res) => {
 
     const rawBody = getRawBody(req);
 
-    console.log("stripeWebhook: rawBody length:", rawBody.length, "bytes");
+    console.log("stripeWebhook: rawBody : ", rawBody);
 
     const config = getConnectorConfig(connector);
     if (!config.webhookSecret) return res.status(500).json({ message: "Connector is missing webhookSecret in config" });
