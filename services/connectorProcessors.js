@@ -125,8 +125,17 @@ async function processStripe({ connector, eventType, payload: event, deps }) {
 
     if (type === "payment_intent.succeeded" || type === "charge.succeeded") {
         const pi = event.data.object;
-        const checkoutToken = pi.metadata?.attribution_token || pi.metadata?.checkout_token || null;
-        const email = pi.receipt_email || pi.metadata?.email || null;
+        const metadata = pi.metadata || {};
+        const checkoutToken = metadata.attribution_token || metadata.checkout_token || null;
+        const email = pi.receipt_email || metadata.email || null;
+        const visitorId = metadata.visitor_id || metadata.visitorId || metadata.elysium_visitor_id || null;
+        const attribution = {
+            source: metadata.utm_source || metadata.source || null,
+            medium: metadata.utm_medium || metadata.medium || null,
+            campaign: metadata.utm_campaign || metadata.campaign || null,
+            term: metadata.utm_term || metadata.term || null,
+            content: metadata.utm_content || metadata.content || null,
+        };
         const externalId = type === "charge.succeeded" ? pi.payment_intent || pi.id : pi.id;
         const amountReceived = pi.amount_received ?? pi.amount_captured ?? pi.amount;
 
@@ -141,6 +150,8 @@ async function processStripe({ connector, eventType, payload: event, deps }) {
                 netAmount: money(amountReceived),
                 checkoutToken,
                 email,
+                ...(visitorId ? { visitorId } : {}),
+                ...(Object.values(attribution).some(Boolean) ? { attribution } : {}),
                 connectorId,
                 idempotencyKey: externalId,
             },

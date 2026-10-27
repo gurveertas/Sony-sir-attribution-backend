@@ -453,10 +453,16 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
     const sessionCustomer = sessionVisitor?.customerId
         ? await t.Customer.where({ id: sessionVisitor.customerId }).first().catch(() => null)
         : null;
+    const inputVisitor = input.visitorId
+        ? await t.Visitor.where({ visitorId: input.visitorId }).first().catch(() => null)
+        : null;
+    const visitorCustomer = inputVisitor?.customerId
+        ? await t.Customer.where({ id: inputVisitor.customerId }).first().catch(() => null)
+        : null;
     const bookingCustomer = booking?.customerId
         ? await t.Customer.where({ id: booking.customerId }).first().catch(() => null)
         : null;
-    const finalCustomer = customer ?? sessionCustomer ?? bookingCustomer;
+    const finalCustomer = customer ?? sessionCustomer ?? visitorCustomer ?? bookingCustomer;
     if (input.visitorId && finalCustomer) await linkVisitorToCustomer(client, workspaceId, input.visitorId, finalCustomer.id);
     if (!hasCampaignTouch && finalCustomer) {
         await persistOrderCampaignTouch(client, workspaceId, input, Boolean(ctx.isTest), finalCustomer.id);

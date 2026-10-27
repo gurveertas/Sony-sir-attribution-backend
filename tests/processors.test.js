@@ -23,6 +23,35 @@ test("stripe payment_intent.succeeded -> order with token, major units, idempote
     assert.ok(out.order);
 });
 
+test("stripe payment_intent.succeeded forwards metadata attribution and visitor id", async () => {
+    const { deps, calls } = fakeDeps();
+    const event = { type: "payment_intent.succeeded", data: { object: {
+        id: "pi_attributed",
+        created: 1_793_091_508,
+        currency: "inr",
+        amount: 14900,
+        amount_received: 14900,
+        metadata: {
+            utm_medium: "email",
+            utm_source: "newsletter",
+            utm_campaign: "creator_collab",
+            elysium_visitor_id: "visitor-123",
+        },
+    } } };
+
+    await processConnectorEvent({ connector: connector("stripe"), eventType: event.type, payload: event, deps });
+
+    assert.equal(calls.orders.length, 1);
+    assert.equal(calls.orders[0].visitorId, "visitor-123");
+    assert.deepEqual(calls.orders[0].attribution, {
+        source: "newsletter",
+        medium: "email",
+        campaign: "creator_collab",
+        term: null,
+        content: null,
+    });
+});
+
 test("stripe checkout.session.completed: only when paid; token from client_reference_id fallback", async () => {
     const { deps, calls } = fakeDeps();
     const mk = (status) => ({ type: "checkout.session.completed", data: { object: {

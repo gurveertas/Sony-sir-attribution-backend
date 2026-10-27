@@ -19,6 +19,7 @@ const { processRawEvent } = await import("../services/eventQueue.js");
 const { tenantDb, TenantScopeError } = await import("../services/tenantDb.js");
 const { drainJobs, setJobsPaused } = await import("../services/jobs.js");
 const { buildCreditRows } = await import("../services/attributionEngine.js");
+const { processConnectorEvent } = await import("../services/connectorProcessors.js");
 
 const T = fake.tables;
 const db = fake.db;
@@ -91,6 +92,49 @@ test("customer campaign source without a visitor id is attributed and returned a
     });
     assert.equal(order.statusCode, 201);
     assert.equal(creditsOf(order.body.orderId, "last_non_direct")[0].channel, "email");
+
+    const res = makeRes();
+    await customers.listCustomers({ query: {}, workspaceId: WS }, res);
+    assert.equal(res.body.data[0].firstSource, "email");
+});
+
+test("Stripe metadata visitor and UTM source reach the customer's firstSource", async () => {
+    const sdkVisitorId = "067c499d-e6a7-49a2-aaee-ef24b26a6591";
+    const visitorId = await visitor(sdkVisitorId);
+    await touch(visitorId, "2026-10-27T04:00:00Z", {
+        source: "newsletter",
+        medium: "email",
+        campaign: "creator_collab",
+        channel: "email",
+    });
+    const identified = makeRes();
+    await tracking.identifyVisitor({
+        workspaceId: WS,
+        body: { visitorId: sdkVisitorId, email: "stripe-customer@example.com" },
+        headers: {},
+    }, identified);
+    assert.equal(identified.statusCode, 200);
+
+    await processConnectorEvent({
+        connector: { id: "stripe-connector", workspaceId: WS, type: "stripe" },
+        eventType: "payment_intent.succeeded",
+        payload: {
+            type: "payment_intent.succeeded",
+            data: { object: {
+                id: "pi_stripe_metadata",
+                created: 1_793_091_508,
+                currency: "inr",
+                amount: 14900,
+                amount_received: 14900,
+                metadata: {
+                    utm_medium: "email",
+                    utm_source: "newsletter",
+                    utm_campaign: "creator_collab",
+                    elysium_visitor_id: sdkVisitorId,
+                },
+            } },
+        },
+    });
 
     const res = makeRes();
     await customers.listCustomers({ query: {}, workspaceId: WS }, res);
