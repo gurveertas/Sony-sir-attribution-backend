@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { db } from './src/prisma/db.js';
+import { db, closeDatabase } from './src/prisma/db.js';
 import ENV from './utils/env.js';
 
 // ── Route imports ──────────────────────────────────────────────────────────
@@ -121,7 +121,7 @@ const handleShutdown = async (signal) => {
         console.log("HTTP server closed.");
         try {
             await stopWorkers();
-            await db.close();
+            await closeDatabase();
             console.log("Database connection pool closed successfully.");
         } catch (dbErr) {
             console.error("Error closing database pool:", dbErr.message);

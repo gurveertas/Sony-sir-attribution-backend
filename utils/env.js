@@ -67,6 +67,7 @@ ENV.GOOGLE_ADS_CLIENT_ID = process.env.GOOGLE_ADS_CLIENT_ID || null;
 ENV.GOOGLE_ADS_CLIENT_SECRET = process.env.GOOGLE_ADS_CLIENT_SECRET || null;
 ENV.GOOGLE_ADS_DEVELOPER_TOKEN = process.env.GOOGLE_ADS_DEVELOPER_TOKEN || null;
 ENV.DISABLE_BACKGROUND_WORKERS = String(process.env.DISABLE_BACKGROUND_WORKERS ?? "false").toLowerCase() === "true";
+if (process.env.VERCEL === "1") ENV.DISABLE_BACKGROUND_WORKERS = true;
 ENV.FX_AUTO_SYNC_ENABLED = String(process.env.FX_AUTO_SYNC_ENABLED ?? "true").toLowerCase() !== "false";
 
 if (!process.env.FRONTEND_URL) {
