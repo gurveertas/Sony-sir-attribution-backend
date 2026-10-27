@@ -71,11 +71,11 @@ export const listCustomers = async (req, res, WID) => {
         const credits = await t.AttributionCredit.where({ model }).all();
         const creditsBy = new Map();
         for (const c of credits) if (c.orderId) (creditsBy.get(c.orderId) ?? creditsBy.set(c.orderId, []).get(c.orderId)).push(c);
-        const sourceOf = (order) => {
-            if (!order) return null;
-            const best = [...(creditsBy.get(order.id) ?? [])].sort((a, b) => Number(BigInt(b.amountMinorUnits ?? 0) - BigInt(a.amountMinorUnits ?? 0)))[0];
-            return best?.channel ?? UNATTRIBUTED_CHANNEL;
-        };
+        const bestCreditOf = (order) => order
+            ? [...(creditsBy.get(order.id) ?? [])].sort((a, b) => Number(BigInt(b.amountMinorUnits ?? 0) - BigInt(a.amountMinorUnits ?? 0)))[0] ?? null
+            : null;
+        const sourceOf = (order) => bestCreditOf(order)?.channel ?? (order ? UNATTRIBUTED_CHANNEL : null);
+        const campaignOf = (order) => bestCreditOf(order)?.campaign ?? null;
 
         let rows = customers.map((c) => {
             const list = (ordersBy.get(c.id) ?? []).sort((a, b) => new Date(a.orderedAt) - new Date(b.orderedAt));
@@ -92,7 +92,9 @@ export const listCustomers = async (req, res, WID) => {
                 lifetimeRevenueMinorUnits: revenue.toString(),
                 currency: list[0]?.currency ?? workspace?.reportingCurrency ?? null,
                 firstSource: sourceOf(list[0]),
+                firstCampaign: campaignOf(list[0]),
                 lastSource: sourceOf(list[list.length - 1]),
+                lastCampaign: campaignOf(list[list.length - 1]),
                 type: list.length === 0 ? "prospect" : list.length === 1 ? "new" : "returning",
                 externalIds: c.externalIds ?? null,
             };
@@ -108,7 +110,7 @@ export const listCustomers = async (req, res, WID) => {
         });
 
         if (wantsCsv(req)) {
-            return sendCsv(res, "customers.csv", rows, ["id", ...(showEmail(req) ? ["email"] : []), "firstSeenAt", "firstPurchaseAt", "lastPurchaseAt", "orders", "lifetimeRevenueMinorUnits", "currency", "firstSource", "lastSource", "type"]);
+            return sendCsv(res, "customers.csv", rows, ["id", ...(showEmail(req) ? ["email"] : []), "firstSeenAt", "firstPurchaseAt", "lastPurchaseAt", "orders", "lifetimeRevenueMinorUnits", "currency", "firstSource", "firstCampaign", "lastSource", "lastCampaign", "type"]);
         }
         // the list is sorted by the chosen column; paginate keeps that order (cursor by position key)
         const keyed = rows.map((r, i) => ({ ...r, _k: String(rows.length - i).padStart(10, "0") }));
