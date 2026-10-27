@@ -118,7 +118,7 @@ export const stripeWebhook = async (req, res) => {
         return res.status(400).json({ message: "Invalid JSON webhook payload" });
     }
 
-    return ingest({ res, connector, source: "stripe", eventType: event.type, payload: event, label: "stripeWebhook" });
+    return ingest({ res, connector, source: "stripe", eventType: event.type || event.event_type, payload: event, label: "stripeWebhook" });
 };
 
 // ── Shopify ──────────────────────────────────────────────────────────────────

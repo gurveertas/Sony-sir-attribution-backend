@@ -298,10 +298,45 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
 
     const existing = await t.Order.where({ externalId: input.externalId }).first();
     if (existing) {
+        // A first webhook can arrive without buyer details and a retry or later event can
+        // include them. Backfill the existing order's identity instead of treating the
+        // duplicate as a reason to discard the newly supplied customer information.
+        let linkedCustomerId = existing.customerId ?? null;
+        if (!linkedCustomerId) {
+            let customer = null;
+            if (input.email || input.phone || input.customerExternalId) {
+                ({ customer } = await resolveCustomer(client, workspaceId, {
+                    email: input.email,
+                    phone: input.phone,
+                    externalId: input.customerExternalId,
+                    externalIdKey: input.customerExternalIdKey || ctx.connectorType || "default",
+                }));
+            }
+            if (!customer && input.checkoutToken) {
+                const session = await t.CheckoutSession.where({ token: input.checkoutToken }).first().catch(() => null);
+                const visitor = session?.visitorId ? await t.Visitor.where({ id: session.visitorId }).first().catch(() => null) : null;
+                if (visitor?.customerId) customer = await t.Customer.where({ id: visitor.customerId }).first().catch(() => null);
+            }
+            if (!customer && input.visitorId) {
+                const visitor = await t.Visitor.where({ visitorId: input.visitorId }).first().catch(() => null);
+                if (visitor?.customerId) customer = await t.Customer.where({ id: visitor.customerId }).first().catch(() => null);
+            }
+            if (customer) {
+                linkedCustomerId = customer.id;
+                await client.transaction(async (tx) => {
+                    await tenantDb(tx, workspaceId).Order.where({ id: existing.id }).update({ customerId: customer.id });
+                    if (isPaidOrder(existing.status)) await recomputeNewVsReturning(tx, workspaceId, customer.id);
+                });
+                if (input.visitorId) await linkVisitorToCustomer(client, workspaceId, input.visitorId, customer.id);
+            }
+        }
+        const freshExisting = linkedCustomerId
+            ? await t.Order.where({ id: existing.id }).first()
+            : existing;
         const credits = await t.AttributionCredit.where({ orderId: existing.id }).all();
         return {
             statusCode: 200,
-            body: orderResponse(existing, {
+            body: orderResponse(freshExisting, {
                 status: "already_processed",
                 orderStatus: existing.status,
                 message: "Duplicate order — already ingested",

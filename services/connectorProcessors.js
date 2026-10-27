@@ -90,8 +90,35 @@ const money = (minor) => minor / 100;
 async function processStripe({ connector, eventType, payload: event, deps }) {
     const workspaceId = connector.workspaceId;
     const connectorId = connector.id;
-    const type = eventType || event?.type;
+    const type = eventType || event?.type || event?.event_type;
     const result = {};
+
+    // Accept the compact payment webhook shape emitted by integrations that wrap
+    // Stripe's event before forwarding it, as well as Stripe's native data.object.
+    if (event?.payment && !event?.data?.object && type === "checkout.session.completed") {
+        const payment = event.payment;
+        const customer = event.customer || {};
+        if (payment.status === "paid") {
+            const amount = money(payment.amount ?? 0);
+            result.order = await invoke(
+                deps.createOrder,
+                workspaceId,
+                {
+                    externalId: payment.payment_intent || payment.session_id,
+                    orderedAt: new Date((event.timestamps?.session_created || event.timestamps?.event_created || Date.now() / 1000) * 1000).toISOString(),
+                    currency: (payment.currency || "usd").toUpperCase(),
+                    grossAmount: amount,
+                    netAmount: amount,
+                    email: customer.email || null,
+                    phone: customer.phone || null,
+                    visitorId: event.attribution?.visitor_id || null,
+                    connectorId,
+                },
+                "Stripe order ingestion",
+            );
+        }
+        return result;
+    }
 
     if (type === "payment_intent.succeeded" || type === "charge.succeeded") {
         const pi = event.data.object;
