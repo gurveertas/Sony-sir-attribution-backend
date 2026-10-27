@@ -321,7 +321,22 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
         externalId: input.customerExternalId,
         externalIdKey: input.customerExternalIdKey || ctx.connectorType || "default",
     });
-    const finalCustomer = customer ?? (booking?.customerId ? await t.Customer.where({ id: booking.customerId }).first() : null);
+    // Payment webhooks often contain only the checkout token (gateway payloads do not
+    // consistently include the buyer's email/phone). The SDK's identify call links the
+    // checkout session's visitor to a Customer, so carry that identity onto the order.
+    const checkoutSession = input.checkoutToken
+        ? await t.CheckoutSession.where({ token: input.checkoutToken }).first().catch(() => null)
+        : null;
+    const sessionVisitor = checkoutSession?.visitorId
+        ? await t.Visitor.where({ id: checkoutSession.visitorId }).first().catch(() => null)
+        : null;
+    const sessionCustomer = sessionVisitor?.customerId
+        ? await t.Customer.where({ id: sessionVisitor.customerId }).first().catch(() => null)
+        : null;
+    const bookingCustomer = booking?.customerId
+        ? await t.Customer.where({ id: booking.customerId }).first().catch(() => null)
+        : null;
+    const finalCustomer = customer ?? sessionCustomer ?? bookingCustomer;
     if (input.visitorId && finalCustomer) await linkVisitorToCustomer(client, workspaceId, input.visitorId, finalCustomer.id);
 
     const resolved = await resolveTouches(t, ctxData, {
