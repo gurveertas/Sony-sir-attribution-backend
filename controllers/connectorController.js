@@ -99,8 +99,13 @@ export const stripeWebhook = async (req, res) => {
     if (!connector) return;
 
     const rawBody = getRawBody(req);
+
+    console.log("stripeWebhook: rawBody length:", rawBody.length, "bytes");
+
     const config = getConnectorConfig(connector);
     if (!config.webhookSecret) return res.status(500).json({ message: "Connector is missing webhookSecret in config" });
+
+    console.log("stripeWebhook: verifying signature with webhookSecret:", config.webhookSecret);
 
     if (!verifyStripeSignature(rawBody, req.headers["stripe-signature"], config.webhookSecret)) {
         return res.status(400).json({ message: "Invalid or expired Stripe signature" });
