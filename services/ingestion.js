@@ -277,12 +277,31 @@ export function normalizeOrderInput(body = {}) {
 }
 
 /** Save campaign fields forwarded with an order as a touch so they enter the same attribution pipeline as tracked visits. */
-async function persistOrderCampaignTouch(client, workspaceId, input, isTest) {
+async function persistOrderCampaignTouch(client, workspaceId, input, isTest, customerId = null) {
     const { source, medium, campaign, term, content } = input.attribution ?? {};
-    if (!input.visitorId || !(source || medium || campaign)) return false;
+    if (!(source || medium || campaign)) return false;
 
     const t = tenantDb(client, workspaceId);
-    const visitor = await ensureVisitor(client, workspaceId, input.visitorId);
+    let visitor;
+    if (input.visitorId) {
+        visitor = await ensureVisitor(client, workspaceId, input.visitorId);
+    } else if (customerId) {
+        const visitors = await t.Visitor.where({ customerId }).all();
+        visitor = visitors[0];
+        if (!visitor) {
+            const visitorId = `customer-attribution:${customerId}`;
+            visitor = await t.Visitor.where({ visitorId }).first();
+            if (visitor?.customerId && visitor.customerId !== customerId) {
+                throw new Error("Customer attribution visitor is linked to another customer");
+            }
+            visitor ??= await ensureVisitor(client, workspaceId, visitorId);
+            if (visitor.customerId !== customerId) {
+                await linkVisitorToCustomer(client, workspaceId, visitorId, customerId);
+            }
+        }
+    } else {
+        return false;
+    }
     const touchedAt = input.attribution.touchedAt || input.orderedAt;
     const recentTouches = await t.Touch.where({ visitorId: visitor.id }).all();
     const duplicate = recentTouches.some((touch) =>
@@ -336,7 +355,7 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
     const client = ctx.client ?? db;
     const t = tenantDb(client, workspaceId);
     const input = normalizeOrderInput(body);
-    const hasCampaignTouch = await persistOrderCampaignTouch(client, workspaceId, input, Boolean(ctx.isTest));
+    let hasCampaignTouch = await persistOrderCampaignTouch(client, workspaceId, input, Boolean(ctx.isTest));
 
     const existing = await t.Order.where({ externalId: input.externalId }).first();
     if (existing) {
@@ -378,6 +397,9 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
             }
         }
         if (linkedCustomerId && input.visitorId) await linkVisitorToCustomer(client, workspaceId, input.visitorId, linkedCustomerId);
+        if (!hasCampaignTouch && linkedCustomerId) {
+            hasCampaignTouch = await persistOrderCampaignTouch(client, workspaceId, input, Boolean(ctx.isTest), linkedCustomerId);
+        }
         if (linkedCustomerId !== existing.customerId || hasNewAttributionIds || (linkedCustomerId && isPaidOrder(existing.status))) {
             await client.transaction(async (tx) => {
                 const updates = {};
@@ -436,6 +458,9 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
         : null;
     const finalCustomer = customer ?? sessionCustomer ?? bookingCustomer;
     if (input.visitorId && finalCustomer) await linkVisitorToCustomer(client, workspaceId, input.visitorId, finalCustomer.id);
+    if (!hasCampaignTouch && finalCustomer) {
+        await persistOrderCampaignTouch(client, workspaceId, input, Boolean(ctx.isTest), finalCustomer.id);
+    }
 
     const resolved = await resolveTouches(t, ctxData, {
         kind: "order",

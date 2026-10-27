@@ -13,7 +13,8 @@ const reports = await import("../controllers/reportsController.js");
 const orders = await import("../controllers/orderController.js");
 const refunds = await import("../controllers/refundController.js");
 const tracking = await import("../controllers/trackingController.js");
-const { mergeCustomersHandler } = await import("../controllers/customerController.js");
+const customers = await import("../controllers/customerController.js");
+const { mergeCustomersHandler } = customers;
 const { processRawEvent } = await import("../services/eventQueue.js");
 const { tenantDb, TenantScopeError } = await import("../services/tenantDb.js");
 const { drainJobs, setJobsPaused } = await import("../services/jobs.js");
@@ -76,6 +77,24 @@ test("2. The same payment sent twice creates one order (and one set of credits)"
     assert.equal(b.body.status, "already_processed");
     assert.equal(T.Order.length, 1);
     assert.equal(T.AttributionCredit.length, 6, "one unattributed row per model, not twelve");
+});
+
+test("customer campaign source without a visitor id is attributed and returned as firstSource", async () => {
+    const order = await ingestOrder(WS, {
+        externalId: "campaign-order",
+        orderedAt: "2026-03-04T10:00:00Z",
+        currency: "INR",
+        grossAmount: 500,
+        email: "campaign@example.com",
+        source: "newsletter",
+        medium: "email",
+    });
+    assert.equal(order.statusCode, 201);
+    assert.equal(creditsOf(order.body.orderId, "last_non_direct")[0].channel, "email");
+
+    const res = makeRes();
+    await customers.listCustomers({ query: {}, workspaceId: WS }, res);
+    assert.equal(res.body.data[0].firstSource, "email");
 });
 
 // ── 3 ───────────────────────────────────────────────────────────────────────
