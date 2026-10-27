@@ -9,7 +9,7 @@ test("daily FX sync imports a rolling EUR reference history, preserves manual ra
     const fake = createFakeDb();
     const endDate = new Date().toISOString().slice(0, 10);
     const startDateValue = new Date(`${endDate}T00:00:00.000Z`);
-    startDateValue.setUTCDate(startDateValue.getUTCDate() - 14);
+    startDateValue.setUTCDate(startDateValue.getUTCDate() - 45);
     const startDate = startDateValue.toISOString().slice(0, 10);
     fake.tables.FxRate = [
         { id: "manual-rate", date: endDate, base: "EUR", quote: "INR", rate: 100, source: "admin_upload" },

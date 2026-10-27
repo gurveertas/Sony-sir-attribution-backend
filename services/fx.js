@@ -9,7 +9,7 @@
  */
 
 const MAX_STALENESS_DAYS = 7;
-const RATE_HISTORY_DAYS = MAX_STALENESS_DAYS * 2;
+const RATE_HISTORY_DAYS = 45;
 const FX_PROVIDER_URL = "https://api.frankfurter.dev/v1";
 const AUTOMATED_RATE_SOURCE = "frankfurter";
 
@@ -98,7 +98,7 @@ async function fetchJson(fetchImpl, url) {
 }
 
 /**
- * Fetch a rolling two-week ECB reference history through Frankfurter. Storing EUR reference pairs
+ * Fetch a rolling 45-day ECB reference history through Frankfurter. Storing EUR reference pairs
  * lets findRate derive any supported cross-currency rate. Only automated rows are refreshed;
  * manually uploaded rates remain authoritative.
  */

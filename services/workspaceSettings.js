@@ -11,6 +11,7 @@ import { isValidTimeZone } from "../utils/timezone.js";
 import { ATTRIBUTION_MODELS } from "./attributionEngine.js";
 import { enqueueJob } from "./jobs.js";
 import { requestRebuild, invalidateRollups } from "./rollups.js";
+import ENV from "../utils/env.js";
 
 const CONSENT_MODES = ["off", "opt_in", "opt_out"];
 
@@ -71,6 +72,9 @@ const REBUILD_ON = new Set(["timezone", "reportingCurrency", "defaultModel", "ta
 /** Queue the background work a settings change requires. Returns what was queued. */
 export async function scheduleRebuildIfNeeded(workspaceId, changedKeys, actorUserId = null) {
     const keys = new Set(changedKeys);
+    if (keys.has("reportingCurrency") && ENV.FX_AUTO_SYNC_ENABLED) {
+        enqueueJob("fxrates.sync", { day: new Date().toISOString().slice(0, 10) });
+    }
     if ([...keys].some((k) => REATTRIBUTE_ON.has(k))) {
         await invalidateRollups(workspaceId); // past credits are about to change
         enqueueJob("attribution.rerun", { workspaceId, actorUserId, reason: "settings_changed" });

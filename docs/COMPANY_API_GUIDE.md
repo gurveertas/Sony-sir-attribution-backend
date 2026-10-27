@@ -563,9 +563,9 @@ New-vs-returning is decided when the order is ingested and stored on the order; 
 - `from=2026-03-02&to=2026-03-02` means the whole local day of 2 March. Send full ISO timestamps if you need exact instants.
 - All timestamps are stored and returned in **UTC (ISO-8601)**.
 - Money is stored as **integer minor units** plus a currency code; API responses return minor units as strings.
-- Daily ECB reference rates are fetched automatically from a single EUR-based feed. Conversions use direct/inverse pairs first, then derive cross-currency rates through EUR; companies do not need to upload both directions.
+- Daily ECB reference rates are fetched automatically from a single EUR-based feed, retaining a rolling 45 days of history. Changing reporting currency queues an immediate sync, and workers recover hourly if the automated-rate table has no rows. Conversions use direct/inverse pairs first, then derive cross-currency rates through EUR; companies do not need to upload both directions for currencies supported by Frankfurter's ECB feed. Other currencies require uploaded rates.
 - An exchange rate is snapshotted on each order and is not changed by later daily updates. Manually uploaded rates take precedence over the automatic feed; missing order snapshots are backfilled when a valid rate becomes available.
-- The automatic feed requires the background workers to be enabled and can be disabled with `FX_AUTO_SYNC_ENABLED=false`. The feed uses Frankfurter's ECB reference rates, which may differ from a payment provider's actual settlement rate.
+- The automatic feed requires the background workers to be enabled and can be disabled with `FX_AUTO_SYNC_ENABLED=false`. The feed uses Frankfurter's ECB reference rates, which may differ from a payment provider's actual settlement rate. Reports older than the rolling 45-day history may need historical rates uploaded manually.
 - **Tax is excluded** from revenue unless your company chooses otherwise.
 - Refunds reduce revenue on the **refund date**.
 

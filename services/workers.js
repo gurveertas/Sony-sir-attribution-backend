@@ -10,6 +10,7 @@
  *   every 10 min rebuild rollups that were never built for a company with data, and refresh rollups
  *               that are behind
  *   every hour  sync ad spend for connected Meta / Google accounts (each account at most every 6 h)
+ *               recover FX rates if the automated feed has no stored rows
  *   every day   sync ECB reference FX rates, backfill missing order snapshots, and rebuild rollups
  *   every day   apply data retention
  */
@@ -92,6 +93,14 @@ function fxRateSweep() {
     enqueueJob("fxrates.sync", { day });
 }
 
+async function recoverEmptyFxRates() {
+    if (!ENV.FX_AUTO_SYNC_ENABLED) return;
+    const existing = await db.orm.public.FxRate.where({ source: "frankfurter" }).first();
+    if (existing) return;
+    const day = new Date().toISOString().slice(0, 10);
+    enqueueJob("fxrates.sync", { day });
+}
+
 async function rollupSweep() {
     if (!rollupsAvailable()) return;
     for (const w of await db.orm.public.Workspace.where({ status: "active" }).all()) {
@@ -129,6 +138,7 @@ export function startWorkers() {
     every(30_000, () => pollDueDeliveries(), "webhook poll");
     every(10 * 60_000, rollupSweep, "rollup sweep")();
     every(60 * 60_000, adSpendSweep, "ad spend sweep");
+    every(60 * 60_000, recoverEmptyFxRates, "FX empty-table recovery")();
     every(24 * 60 * 60_000, fxRateSweep, "FX rate sync")();
     fxRateSweep();
     every(24 * 60 * 60_000, async () => {

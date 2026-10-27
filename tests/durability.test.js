@@ -13,6 +13,7 @@ const { ingestOrder } = await import("../services/ingestion.js");
 const reports = await import("../controllers/reportsController.js");
 const rollups = await import("../services/rollups.js");
 const refunds = await import("../controllers/refundController.js");
+const { scheduleRebuildIfNeeded } = await import("../services/workspaceSettings.js");
 
 const T = fake.tables;
 const WS = "ws1";
@@ -46,6 +47,18 @@ test("a durable job is stored before it runs and marked done after", async () =>
     assert.equal(T.BackgroundJob[0].status, "done");
     assert.equal(T.BackgroundJob[0].type, "adspend.sync");
     assert.ok(T.BackgroundJob[0].finishedAt);
+});
+
+test("changing reporting currency queues an immediate FX sync", async () => {
+    jobs.setJobsPaused(true);
+    await scheduleRebuildIfNeeded(WS, ["reportingCurrency"]);
+    await jobs.drainJobs();
+
+    const fxSync = T.BackgroundJob.find((job) => job.type === "fxrates.sync");
+    assert.ok(fxSync);
+    assert.equal(fxSync.status, "queued");
+    assert.equal(fxSync.payload.day, new Date().toISOString().slice(0, 10));
+    jobs.setJobsPaused(false);
 });
 
 test("non-durable jobs (inbound events, webhook deliveries) are not stored twice", async () => {
