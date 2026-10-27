@@ -253,6 +253,17 @@ export function normalizeOrderInput(body = {}) {
         customerExternalIdKey: str(body.customerExternalIdKey, 64),
         visitorId: str(body.visitorId, 200),
         checkoutToken: str(body.checkoutToken, 200),
+        attribution: (() => {
+            const a = body.attribution && typeof body.attribution === "object" ? body.attribution : {};
+            return {
+                source: str(a.utm_source ?? a.source ?? body.utm_source ?? body.source, 300),
+                medium: str(a.utm_medium ?? a.medium ?? body.utm_medium ?? body.medium, 300),
+                campaign: str(a.utm_campaign ?? a.campaign ?? body.utm_campaign ?? body.campaign, 300),
+                term: str(a.utm_term ?? a.term ?? body.utm_term ?? body.term, 300),
+                content: str(a.utm_content ?? a.content ?? body.utm_content ?? body.content, 300),
+                touchedAt: validDate(a.touchedAt ?? a.visitedAt) ? iso(a.touchedAt ?? a.visitedAt) : null,
+            };
+        })(),
         clickIds: readClickIds(body),
         bookingRef: body.bookingId || body.bookingExternalId ? { bookingId: body.bookingId ?? null, bookingExternalId: body.bookingExternalId ?? null } : null,
         items: items.map((it) => ({
@@ -263,6 +274,36 @@ export function normalizeOrderInput(body = {}) {
             externalId: str(it.externalId, 200),
         })),
     };
+}
+
+/** Save campaign fields forwarded with an order as a touch so they enter the same attribution pipeline as tracked visits. */
+async function persistOrderCampaignTouch(client, workspaceId, input, isTest) {
+    const { source, medium, campaign, term, content } = input.attribution ?? {};
+    if (!input.visitorId || !(source || medium || campaign)) return false;
+
+    const t = tenantDb(client, workspaceId);
+    const visitor = await ensureVisitor(client, workspaceId, input.visitorId);
+    const touchedAt = input.attribution.touchedAt || input.orderedAt;
+    const recentTouches = await t.Touch.where({ visitorId: visitor.id }).all();
+    const duplicate = recentTouches.some((touch) =>
+        touch.source === source && touch.medium === medium && touch.campaign === campaign &&
+        Math.abs(new Date(touchedAt).getTime() - new Date(touch.touchedAt).getTime()) < 30 * 60 * 1000,
+    );
+    if (!duplicate) {
+        const rules = (await client.orm.public.ChannelMappingRule.where({ workspaceId }).all()).filter((rule) => rule.isActive !== false);
+        await t.Touch.create({
+            visitorId: visitor.id,
+            source,
+            medium,
+            campaign,
+            term,
+            content,
+            channel: classifyChannel({ source, medium, campaign }, rules),
+            touchedAt,
+            isTest: Boolean(isTest),
+        });
+    }
+    return true;
 }
 
 const orderResponse = (order, extra = {}) => ({
@@ -295,6 +336,7 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
     const client = ctx.client ?? db;
     const t = tenantDb(client, workspaceId);
     const input = normalizeOrderInput(body);
+    const hasCampaignTouch = await persistOrderCampaignTouch(client, workspaceId, input, Boolean(ctx.isTest));
 
     const existing = await t.Order.where({ externalId: input.externalId }).first();
     if (existing) {
@@ -336,7 +378,7 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
             }
         }
         if (linkedCustomerId && input.visitorId) await linkVisitorToCustomer(client, workspaceId, input.visitorId, linkedCustomerId);
-        if (linkedCustomerId !== existing.customerId || hasNewAttributionIds) {
+        if (linkedCustomerId !== existing.customerId || hasNewAttributionIds || (linkedCustomerId && isPaidOrder(existing.status))) {
             await client.transaction(async (tx) => {
                 const updates = {};
                 if (linkedCustomerId !== existing.customerId) updates.customerId = linkedCustomerId;
@@ -344,12 +386,13 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
                     updates.rawPayload = rawPayload;
                     if (input.checkoutToken) updates.checkoutToken = input.checkoutToken;
                 }
-                await tenantDb(tx, workspaceId).Order.where({ id: existing.id }).update(updates);
-                if (linkedCustomerId && linkedCustomerId !== existing.customerId && isPaidOrder(existing.status)) {
+                if (Object.keys(updates).length) await tenantDb(tx, workspaceId).Order.where({ id: existing.id }).update(updates);
+                if (linkedCustomerId && isPaidOrder(existing.status)) {
                     await recomputeNewVsReturning(tx, workspaceId, linkedCustomerId);
                 }
             });
         }
+        if (hasCampaignTouch) await reattribute(workspaceId, { orderId: existing.id }, { client });
         const freshExisting = linkedCustomerId
             ? await t.Order.where({ id: existing.id }).first()
             : existing;

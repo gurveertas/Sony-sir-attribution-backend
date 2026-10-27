@@ -85,40 +85,6 @@ async function resolveDeps(overrides = {}) {
 
 const money = (minor) => minor / 100;
 
-async function persistWebhookCampaignTouch({ workspaceId, visitorSdkId, attribution, touchedAt, isTest }) {
-    const source = attribution?.utm_source || attribution?.source || null;
-    const medium = attribution?.utm_medium || attribution?.medium || null;
-    const campaign = attribution?.utm_campaign || attribution?.campaign || null;
-    if (!visitorSdkId || !(source || medium || campaign)) return;
-
-    const [{ db }, { ensureVisitor }, { classifyChannel }, { tenantDb }] = await Promise.all([
-        import("../src/prisma/db.js"),
-        import("./identityService.js"),
-        import("./attributionEngine.js"),
-        import("./tenantDb.js"),
-    ]);
-    const t = tenantDb(db, workspaceId);
-    const visitor = await ensureVisitor(db, workspaceId, visitorSdkId);
-    const at = new Date(touchedAt).toISOString();
-    const recent = await t.Touch.where({ visitorId: visitor.id }).all();
-    const duplicate = recent.find((touch) =>
-        touch.source === source && touch.medium === medium && touch.campaign === campaign &&
-        Math.abs(new Date(at).getTime() - new Date(touch.touchedAt).getTime()) < 30 * 60 * 1000,
-    );
-    if (duplicate) return;
-
-    const rules = (await db.orm.public.ChannelMappingRule.where({ workspaceId }).all()).filter((rule) => rule.isActive !== false);
-    await t.Touch.create({
-        visitorId: visitor.id,
-        source,
-        medium,
-        campaign,
-        channel: classifyChannel({ source, medium, campaign }, rules),
-        touchedAt: at,
-        isTest: Boolean(isTest),
-    });
-}
-
 // ── Stripe ───────────────────────────────────────────────────────────────────
 
 async function processStripe({ connector, eventType, payload: event, deps }) {
@@ -136,7 +102,6 @@ async function processStripe({ connector, eventType, payload: event, deps }) {
             const amount = money(payment.amount ?? 0);
             const visitorId = event.attribution?.visitor_id || event.attribution?.visitorId || null;
             const orderedAt = new Date((event.timestamps?.session_created || event.timestamps?.event_created || Date.now() / 1000) * 1000).toISOString();
-            await persistWebhookCampaignTouch({ workspaceId, visitorSdkId: visitorId, attribution: event.attribution, touchedAt: orderedAt, isTest: !payment.livemode });
             result.order = await invoke(
                 deps.createOrder,
                 workspaceId,
@@ -149,14 +114,11 @@ async function processStripe({ connector, eventType, payload: event, deps }) {
                     email: customer.email || null,
                     phone: customer.phone || null,
                     visitorId,
+                    attribution: event.attribution || null,
                     connectorId,
                 },
                 "Stripe order ingestion",
             );
-            if (visitorId && (event.attribution?.utm_source || event.attribution?.source || event.attribution?.utm_medium || event.attribution?.medium || event.attribution?.utm_campaign || event.attribution?.campaign)) {
-                const orderId = result.order?.orderId || result.order?.id;
-                if (orderId) await (await import("./ingestion.js")).reattribute(workspaceId, { orderId });
-            }
         }
         return result;
     }
