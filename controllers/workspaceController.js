@@ -43,6 +43,7 @@ const ALLOWED_SETTINGS = new Set([
     "lookbackOverrides",
     "consentMode",
     "rawRetentionMonths",
+    "country",
 ]);
 
 /**
