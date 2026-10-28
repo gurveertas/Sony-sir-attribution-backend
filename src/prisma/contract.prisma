@@ -4,6 +4,15 @@
 // Enums
 // ──────────────────────────────────────────
 
+/// How sales and bookings in other currencies are converted to the reporting currency.
+///   transaction_date  each sale/booking at the rate of its own date (corrected when that rate changes)
+///   latest            every sale/booking at the latest available rate (re-valued as rates move)
+enum FxRateMode {
+  transaction_date
+  latest
+  @@type("pg/text@1")
+}
+
 enum WorkspaceStatus {
   @@type("pg/text@1")
   pending   = "pending"
@@ -112,6 +121,7 @@ model Workspace {
   consentMode             ConsentMode         @default(off)
   rawRetentionMonths      Int                 @default(13)
   taxIncludedInRevenue    Boolean             @default(false)
+  fxRateMode              FxRateMode          @default(transaction_date)
   rollupsBuiltAt          TimestamptzString?
   /// changes on every conversion write; rollups are fresh only when rollupsBuiltToken equals it
   rollupsDataToken        String?

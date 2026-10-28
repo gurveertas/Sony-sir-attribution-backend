@@ -42,6 +42,7 @@ test("daily FX sync imports a rolling EUR reference history, preserves manual ra
         currencies: ["EUR", "INR", "USD"],
         written: 3,
         preserved: 1,
+        changedDates: [startDate, endDate],
     });
     assert.equal(fake.tables.FxRate.find((row) => row.id === "manual-rate").rate, 100);
     assert.equal(await findRate(fake.db.orm.public, endDate, "INR", "USD"), 1.1 / 100);
@@ -51,6 +52,7 @@ test("daily FX sync imports a rolling EUR reference history, preserves manual ra
     eurUsd = 1.2;
     const refreshed = await syncLatestRates(fake.db.orm.public, fetchImpl);
     assert.equal(refreshed.written, 2);
+    assert.deepEqual(refreshed.changedDates, [startDate, endDate]);
     assert.equal(refreshed.preserved, 1);
     assert.equal(await findRate(fake.db.orm.public, endDate, "USD", "INR"), 100 / 1.2);
     assert.equal(fake.tables.FxRate.find((row) => row.id === "manual-rate").rate, 100);

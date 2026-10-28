@@ -424,6 +424,7 @@ const ALLOWED_WORKSPACE_SETTINGS = new Set([
   "industry",
   "websiteUrl",
   "reportingCurrency",
+  "fxRateMode",
   "weekStart",
   "defaultModel",
   "lookbackDays",

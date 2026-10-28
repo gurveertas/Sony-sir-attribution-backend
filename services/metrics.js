@@ -35,7 +35,7 @@ import { db } from "../src/prisma/db.js";
 import { tenantDb } from "./tenantDb.js";
 import { ATTRIBUTION_MODELS, DEFAULT_MODEL, UNATTRIBUTED_CHANNEL } from "./attributionEngine.js";
 import { allocateMinor, currencyExponent } from "../utils/money.js";
-import { findRate } from "./fx.js";
+import { findRateWithDate, todayUtc } from "./fx.js";
 import { localDateString, localMidnightUtc, parseDateOnly, isValidTimeZone, RangeInputError, addDays } from "../utils/timezone.js";
 
 export const PAID_STATUSES = ["paid", "partially_refunded", "refunded"];
@@ -111,6 +111,8 @@ export async function readParams(req, workspaceId, { defaultDays = 30 } = {}) {
         campaign: q.campaign || null,
         includeTest: q.includeTest === "true",
         refundsBy: q.refundsBy === "order_date" ? "order_date" : "refund_date",
+        // ?fxMode= overrides the company setting for one report (e.g. to compare both views)
+        fxMode: ["transaction_date", "latest"].includes(q.fxMode) ? q.fxMode : workspace.fxRateMode || "transaction_date",
     };
 }
 
@@ -143,26 +145,61 @@ export function previousRange(range, tz) {
 // Facts
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Converts minor units of an order's currency to the target currency (stored FX snapshot first). */
-function makeConverter(client, target) {
+/**
+ * Converts minor units to the target currency, following the company's FX mode:
+ *   transaction_date  the order's stored rate (refreshed by the FX sync when its day's rate changes),
+ *                     else the rate of `day`
+ *   latest            the latest available rate for every amount, whatever its date
+ * `fx` collects what was used, for the report's `fx` block.
+ */
+export function makeConverter(client, target, mode = "transaction_date") {
     const cache = new Map();
-    return async (minor, currency, day, storedRate, storedQuote) => {
+    const fx = { mode, latestRateDate: null, converted: new Set() };
+    const lookup = async (day, currency) => {
+        const key = `${day}|${currency}`;
+        if (!cache.has(key)) cache.set(key, await findRateWithDate(client.orm.public, day, currency, target));
+        return cache.get(key);
+    };
+    const convert = async (minor, currency, day, storedRate, storedQuote) => {
         const amount = BigInt(minor ?? 0);
         if (currency === target) return amount;
-        let rate = storedRate !== null && storedRate !== undefined && storedQuote === target ? Number(storedRate) : null;
-        if (rate === null) {
-            const key = `${day}|${currency}`;
-            if (!cache.has(key)) cache.set(key, await findRate(client.orm.public, day, currency, target));
-            rate = cache.get(key);
+        let rate = null;
+        if (mode === "latest") {
+            const found = await lookup(todayUtc(), currency);
+            rate = found?.rate ?? null;
+            if (found && (!fx.latestRateDate || found.date < fx.latestRateDate)) fx.latestRateDate = found.date;
+        } else {
+            rate = storedRate !== null && storedRate !== undefined && storedQuote === target ? Number(storedRate) : null;
+            if (rate === null) rate = (await lookup(day, currency))?.rate ?? null;
         }
         if (!(rate > 0)) return null;
-        const expDiff = currencyExponent(target) - currencyExponent(currency);
-        const factor = rate * 10 ** expDiff;
-        // fixed-point multiply with half-up rounding
-        const scaled = amount * BigInt(Math.round(factor * 1e9));
-        const q = scaled / 1_000_000_000n;
-        const r = scaled % 1_000_000_000n;
-        return r * 2n >= 1_000_000_000n ? q + 1n : r * 2n <= -1_000_000_000n ? q - 1n : q;
+        fx.converted.add(currency);
+        return scaleByRate(amount, rate, currency, target);
+    };
+    convert.fx = fx;
+    return convert;
+}
+
+/** amount (minor units of `from`) × rate -> minor units of `to`, fixed-point with half-up rounding. */
+export function scaleByRate(amount, rate, from, to) {
+    const expDiff = currencyExponent(to) - currencyExponent(from);
+    const factor = rate * 10 ** expDiff;
+    const scaled = BigInt(amount) * BigInt(Math.round(factor * 1e9));
+    const q = scaled / 1_000_000_000n;
+    const r = scaled % 1_000_000_000n;
+    return r * 2n >= 1_000_000_000n ? q + 1n : r * 2n <= -1_000_000_000n ? q - 1n : q;
+}
+
+/** The `fx` block every report returns: which rates were used. */
+export function fxSummary(convert, currency) {
+    const fx = convert?.fx;
+    if (!fx) return null;
+    return {
+        mode: fx.mode,
+        reportingCurrency: currency,
+        convertedCurrencies: [...fx.converted].sort(),
+        // latest mode: the (oldest) rate date used today; transaction_date: each amount used its own day
+        ratesAsOf: fx.mode === "latest" ? fx.latestRateDate : null,
     };
 }
 
@@ -183,7 +220,7 @@ export async function loadFacts(workspaceId, params, { withCredits = true, model
     const inRange = (instant, day) =>
         range.dayAligned ? day >= range.fromDay && day <= range.toDay : new Date(instant) >= range.fromDate && new Date(instant) <= range.toDate;
 
-    const convert = makeConverter(client, currency);
+    const convert = makeConverter(client, currency, params.fxMode ?? workspace.fxRateMode ?? "transaction_date");
     const warnings = { missingFxOrders: 0, missingFxCurrencies: new Set() };
 
     const orderRows = await t.Order.where((o) => o.orderedAt.gte(lo)).where((o) => o.orderedAt.lte(hi)).all();
@@ -292,6 +329,7 @@ export async function loadFacts(workspaceId, params, { withCredits = true, model
         creditsByBooking,
         touchesById,
         warnings: { missingFxOrders: warnings.missingFxOrders, missingFxCurrencies: [...warnings.missingFxCurrencies] },
+        fx: fxSummary(convert, currency),
     };
 }
 

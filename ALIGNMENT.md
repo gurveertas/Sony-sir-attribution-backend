@@ -72,7 +72,7 @@ SSO, other languages) are not built.
 | 4.8 Ad spend & CAC | `services/adSpend.js`, `services/adPlatforms.js` | CSV upload works now. Meta and Google Ads OAuth + daily sync are written against the public APIs but were **not tested against live accounts**. |
 | 4.9 Platform admin | `platformToolsController`, `platformAdminController`, support sessions | Health page (events/min, latency, queue, dead letters, failing integrations), approvals, company list stats, replay, re-run, rebuild, key rotation, data deletion. Each needs a reason and is audited. 2FA is required. |
 | 4.10 Security & privacy | `services/tenantDb.js`, `middlewares/protectRoute.js`, `services/privacy.js` | Tenant-scoped data layer. Login throttling + lockout, password policy, no account enumeration, TOTP 2FA, sessions revoked on password change. Customer export/erase, retention job, company purge. Errors never log request bodies or personal data. |
-| 4.11 Time, currency & language | `utils/money.js`, `services/fx.js` | Currency-aware minor units (0/2/3 decimals), FX snapshot stored on each order, daily FX table (platform admin upload), tax included/excluded setting, week start. English only (other languages are "Later"). |
+| 4.11 Time, currency & language | `utils/money.js`, `services/fx.js`, `services/fxRevaluation.js` | Currency-aware minor units (0/2/3 decimals). **Dynamic FX:** ECB reference rates are synced every hour (Frankfurter), and manual uploads always win. Each company picks `fxRateMode`: **`transaction_date`** (default): each sale and booking at the rate of its own date, and when that day's rate arrives or changes, the sales it affects (that day plus the 7-day weekend/holiday fallback) are re-priced. **`latest`**: every sale, refund and booking is re-valued at the newest rate. Either way the affected companies' rollups are rebuilt, and every report returns an `fx` block saying which rates it used (`?fxMode=` shows the other view). Also: tax included/excluded setting, week start. English only (other languages are "Later"). |
 | 4.12 Reliability & operations | `services/eventQueue.js`, `services/jobs.js`, `services/workers.js`, `/health` | Inbound events: retries with backoff, dead-letter after 8 attempts, replay. Background jobs (re-runs, rebuilds, refreshes, ad spend syncs) are stored in `BackgroundJob`. A job a stopped or crashed instance leaves behind is resumed by any instance within about 5 minutes (stale lock, conditional claim). Failures retry with backoff and stop after 5 attempts, and platform health shows them with a Retry button. Outbound webhooks are signed (`t=…,v1=HMAC(t.body)`), logged and retried. Health check includes the database. |
 
 ## Dashboard screens (section 5): frontend
@@ -104,6 +104,17 @@ All ten are automated. Run `npm test`: 148 pass, 1 skipped (stale `contract.json
 | 8 | `tests/support.test.js` (support sessions are written to the company's audit log) |
 | Security / platform | `tests/security_platform.test.js` (lockout, 2FA, reset, idempotency, async writes, signed webhooks, erasure, key rotation, ad spend, audited deletion) |
 | Durability | `tests/durability.test.js` (jobs stored and resumed after a stopped instance, one claimer only, heartbeat, retry then dead; rollup freshness shared through the database; refunds list) |
+
+## Dynamic FX (added 28 Oct 2026)
+
+* **Migration:** run `manual-migrations/20261028_fx_rate_mode.sql` (adds `Workspace.fxRateMode`, default
+  `transaction_date`, so existing companies keep today's behaviour). Then regenerate the contract
+  (`npx prisma contract emit`) and deploy. Run the SQL first: a contract that has the column, deployed
+  on a database without it, fails every query on `Workspace`.
+* **Ad spend** is still converted at the rate of each spend's date in both modes. The request covered
+  sales and bookings; say if CAC should follow the mode too.
+* **Rates** come from the ECB, which publishes once per working day (about 16:00 CET). "Today's rate"
+  therefore means the latest published rate, and the report shows its date.
 
 ## Known limits and open decisions
 

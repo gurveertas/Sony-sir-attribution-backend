@@ -33,16 +33,25 @@ const hasFxStore = (orm) => {
  * @returns {Promise<number|null>} units of `quote` per 1 unit of `base`, or null when unknown
  */
 export async function findRate(orm, day, base, quote) {
+    return (await findRateWithDate(orm, day, base, quote))?.rate ?? null;
+}
+
+/**
+ * Same lookup as findRate, plus the date of the rate that was used (it can be up to 7 days earlier
+ * than `day`: weekends and holidays have no ECB rate).
+ * @returns {Promise<{rate: number, date: string}|null>}
+ */
+export async function findRateWithDate(orm, day, base, quote) {
     const b = String(base).toUpperCase();
     const q = String(quote).toUpperCase();
-    if (b === q) return 1;
+    if (b === q) return { rate: 1, date: day };
     if (!hasFxStore(orm)) return null;
     for (let i = 0; i <= MAX_STALENESS_DAYS; i++) {
         const d = addDaysIso(day, -i);
         const direct = await orm.FxRate.where({ date: d, base: b, quote: q }).first();
-        if (direct && Number(direct.rate) > 0) return Number(direct.rate);
+        if (direct && Number(direct.rate) > 0) return { rate: Number(direct.rate), date: d };
         const inverse = await orm.FxRate.where({ date: d, base: q, quote: b }).first();
-        if (inverse && Number(inverse.rate) > 0) return 1 / Number(inverse.rate);
+        if (inverse && Number(inverse.rate) > 0) return { rate: 1 / Number(inverse.rate), date: d };
     }
 
     for (let i = 0; i <= MAX_STALENESS_DAYS; i++) {
@@ -62,10 +71,28 @@ export async function findRate(orm, day, base, quote) {
             : Number((await orm.FxRate.where({ date: d, base: q, quote: "EUR" }).first())?.rate ?? 0);
         const basePerEur = eurToBase > 0 ? eurToBase : baseToEur > 0 ? 1 / baseToEur : 0;
         const quotePerEur = eurToQuote > 0 ? eurToQuote : quoteToEur > 0 ? 1 / quoteToEur : 0;
-        if (basePerEur > 0 && quotePerEur > 0) return quotePerEur / basePerEur;
+        if (basePerEur > 0 && quotePerEur > 0) return { rate: quotePerEur / basePerEur, date: d };
     }
     return null;
 }
+
+/** Date of the newest stored rate on or before `day` (what "latest rate" means today), or null. */
+export async function latestRateDate(orm, day = new Date().toISOString().slice(0, 10)) {
+    if (!hasFxStore(orm)) return null;
+    try {
+        const rows = await orm.FxRate.where((r) => r.date.lte(day)).orderBy((r) => r.date.desc()).limit(1).all();
+        return rows[0]?.date ?? null;
+    } catch {
+        return null;
+    }
+}
+
+/** Today's UTC day: the day "latest rate" lookups start from (findRate falls back up to 7 days). */
+export const todayUtc = (now = new Date()) => now.toISOString().slice(0, 10);
+
+/** How far a change of the rate for day D reaches: sales on D..D+7 may have used it as a fallback. */
+export const FX_FALLBACK_DAYS = MAX_STALENESS_DAYS;
+export { addDaysIso };
 
 /** Validates and upserts rates: [{date, base, quote, rate}] */
 export async function upsertRates(orm, rates, source = "manual") {
@@ -135,6 +162,7 @@ export async function syncLatestRates(orm, fetchImpl = globalThis.fetch) {
 
     let written = 0;
     let preserved = 0;
+    const changedDates = new Set();
     for (const rate of rates) {
         const existing = await orm.FxRate.where({ date: rate.date, base: rate.base, quote: rate.quote }).first();
         if (existing && existing.source !== AUTOMATED_RATE_SOURCE) {
@@ -144,6 +172,7 @@ export async function syncLatestRates(orm, fetchImpl = globalThis.fetch) {
         if (existing && Number(existing.rate) === rate.rate) continue;
         try {
             written += await upsertRates(orm, [rate], AUTOMATED_RATE_SOURCE);
+            changedDates.add(rate.date);
         } catch (error) {
             if (error?.code !== "23505" && error?.code !== "P2002") throw error;
             const concurrent = await orm.FxRate.where({ date: rate.date, base: rate.base, quote: rate.quote }).first();
@@ -154,6 +183,7 @@ export async function syncLatestRates(orm, fetchImpl = globalThis.fetch) {
             }
             await orm.FxRate.where({ id: concurrent.id }).update({ rate: rate.rate, source: AUTOMATED_RATE_SOURCE });
             written++;
+            changedDates.add(rate.date);
         }
     }
     return {
@@ -162,5 +192,7 @@ export async function syncLatestRates(orm, fetchImpl = globalThis.fetch) {
         currencies: [...new Set(["EUR", ...rates.map((rate) => rate.quote)])].sort(),
         written,
         preserved,
+        /** days whose rates were added or changed by this sync (sales and bookings on them may move) */
+        changedDates: [...changedDates].sort(),
     };
 }

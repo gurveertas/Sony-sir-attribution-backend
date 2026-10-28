@@ -36,6 +36,7 @@ const ALLOWED_SETTINGS = new Set([
     "timezone",
     "weekStart",
     "reportingCurrency",
+    "fxRateMode",
     "industry",
     "websiteUrl",
     "defaultModel",

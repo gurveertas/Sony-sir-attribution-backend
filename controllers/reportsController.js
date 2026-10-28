@@ -48,6 +48,7 @@ import { ATTRIBUTION_MODELS, UNATTRIBUTED_CHANNEL } from "../services/attributio
 import { sendError, wantsCsv, sendCsv } from "../services/http.js";
 import { formatMinor } from "../utils/money.js";
 import { localDateString } from "../utils/timezone.js";
+import { latestRateDate } from "../services/fx.js";
 
 const DAY_MS = 86_400_000;
 const PAID_CHANNELS = new Set(["google", "meta", "tiktok", "bing", "linkedin", "snapchat", "paid_other", "affiliate"]);
@@ -111,6 +112,14 @@ const report = (name, handler, csv) => async (req, res, WID) => {
         if (!workspaceId) return res.status(400).json({ message: "Company context is required", code: "validation_error" });
         const params = await readParams(req, workspaceId);
         const body = await handler(req, params, workspaceId);
+        // which exchange rates the money figures use (company setting, or ?fxMode=)
+        if (body && typeof body === "object" && !body.fx) {
+            body.fx = {
+                mode: params.fxMode,
+                reportingCurrency: params.currency,
+                ratesAsOf: params.fxMode === "latest" ? await latestRateDate(db.orm.public) : null,
+            };
+        }
         if (csv && wantsCsv(req)) {
             const { rows, columns } = csv(body, params);
             return sendCsv(res, `${name}-${params.range.fromDay}-${params.range.toDay}.csv`, rows, columns);

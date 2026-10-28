@@ -14,6 +14,7 @@ import { requestRebuild, invalidateRollups } from "./rollups.js";
 import ENV from "../utils/env.js";
 
 const CONSENT_MODES = ["off", "opt_in", "opt_out"];
+export const FX_RATE_MODES = ["transaction_date", "latest"];
 
 /** @returns {string|null} a message describing the first invalid setting */
 export function validateWorkspaceSettings(changes) {
@@ -31,6 +32,9 @@ export function validateWorkspaceSettings(changes) {
         const w = Number(changes.weekStart);
         if (!Number.isInteger(w) || w < 0 || w > 6) return "weekStart must be 0 (Sunday) to 6 (Saturday)";
         changes.weekStart = w;
+    }
+    if ("fxRateMode" in changes && !FX_RATE_MODES.includes(changes.fxRateMode)) {
+        return `fxRateMode must be one of: ${FX_RATE_MODES.join(", ")}`;
     }
     if ("defaultModel" in changes && !ATTRIBUTION_MODELS.includes(changes.defaultModel)) {
         return `defaultModel must be one of: ${ATTRIBUTION_MODELS.join(", ")}`;
@@ -67,7 +71,7 @@ export function validateWorkspaceSettings(changes) {
 }
 
 const REATTRIBUTE_ON = new Set(["lookbackDays", "lookbackOverrides", "channelRules"]);
-const REBUILD_ON = new Set(["timezone", "reportingCurrency", "defaultModel", "taxIncludedInRevenue", "weekStart"]);
+const REBUILD_ON = new Set(["timezone", "reportingCurrency", "fxRateMode", "defaultModel", "taxIncludedInRevenue", "weekStart"]);
 
 /** Queue the background work a settings change requires. Returns what was queued. */
 export async function scheduleRebuildIfNeeded(workspaceId, changedKeys, actorUserId = null) {

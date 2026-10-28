@@ -307,8 +307,13 @@ export const uploadFxRates = async (req, res) => {
             }
             for (const w of touched) await requestRebuild(w);
         }
-        await audit(req, "admin.fx_rates_uploaded", { workspaceId: null, metadata: { written, backfilled } });
-        return res.status(200).json({ written, backfilled });
+        // dynamic FX: sales and bookings on the uploaded days follow the new rates (each company's FX mode)
+        const { applyRateChanges } = await import("../services/fxRevaluation.js");
+        const dates = [...new Set(rates.map((r) => String(r.date)))];
+        const currencies = [...new Set(rates.flatMap((r) => [String(r.base).toUpperCase(), String(r.quote).toUpperCase()]))];
+        const revalued = await applyRateChanges(dates, currencies);
+        await audit(req, "admin.fx_rates_uploaded", { workspaceId: null, metadata: { written, backfilled, ordersRepriced: revalued.ordersRepriced, workspacesRebuilt: revalued.workspacesRebuilt } });
+        return res.status(200).json({ written, backfilled, ordersRepriced: revalued.ordersRepriced, workspacesRebuilt: revalued.workspacesRebuilt });
     } catch (error) {
         return sendError(res, error, "uploadFxRates");
     }

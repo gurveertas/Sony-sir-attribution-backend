@@ -23,7 +23,7 @@ import { sendError, wantsCsv, sendCsv, paginate, sortDesc } from "../services/ht
 import { primarySource } from "./orderController.js";
 import { ATTRIBUTION_MODELS, DEFAULT_MODEL } from "../services/attributionEngine.js";
 import { localDateString } from "../utils/timezone.js";
-import { allowedLocationFilter } from "../services/metrics.js";
+import { allowedLocationFilter, makeConverter, fxSummary } from "../services/metrics.js";
 
 const ingestCtx = (req) => ({
     connectorId: req.connector?.id ?? null,
@@ -167,7 +167,20 @@ export const listUpcomingBookings = async (req, res) => {
         rows.sort((a, b) => new Date(a.appointmentStartAt) - new Date(b.appointmentStartAt));
 
         const { byBooking, locations } = await decorate(t, rows, model);
-        const data = rows.map((b) => serialize(b, primarySource(byBooking.get(b.id)), locations, tz));
+        // booked values in the reporting currency, with the company's FX mode (dynamic: follows rate changes)
+        const reporting = workspace?.reportingCurrency || "USD";
+        const fxMode = ["transaction_date", "latest"].includes(req.query.fxMode) ? req.query.fxMode : workspace?.fxRateMode || "transaction_date";
+        const convert = makeConverter(db, reporting, fxMode);
+        let missingFx = 0;
+        const data = [];
+        for (const b of rows) {
+            const row = serialize(b, primarySource(byBooking.get(b.id)), locations, tz);
+            const converted = await convert(b.bookedValueMinorUnits, b.currency || reporting, String(b.bookedAt ?? b.createdAt).slice(0, 10), null, null);
+            if (converted === null) missingFx++;
+            row.reportingValueMinorUnits = converted === null ? null : converted.toString();
+            row.reportingCurrency = reporting;
+            data.push(row);
+        }
 
         const weekStart = Number.isInteger(workspace?.weekStart) ? workspace.weekStart : 1;
         const weekOf = (day) => {
@@ -179,7 +192,7 @@ export const listUpcomingBookings = async (req, res) => {
         const bump = (map, key, b) => {
             const e = map.get(key) ?? { key, count: 0, bookedValueMinorUnits: 0n, newGuests: 0 };
             e.count++;
-            e.bookedValueMinorUnits += BigInt(b.bookedValueMinorUnits ?? 0);
+            e.bookedValueMinorUnits += BigInt(b.reportingValueMinorUnits ?? 0); // reporting currency
             if (b.guestType === "new") e.newGuests++;
             map.set(key, e);
         };
@@ -194,16 +207,18 @@ export const listUpcomingBookings = async (req, res) => {
         const out = (m) => [...m.values()].map((e) => ({ ...e, bookedValueMinorUnits: e.bookedValueMinorUnits.toString() }));
 
         if (wantsCsv(req)) {
-            return sendCsv(res, "upcoming-bookings.csv", data, ["appointmentStartAt", "appointmentLocalDate", "serviceName", "locationName", "status", "currency", "bookedValueMinorUnits", "guestType", "source"]);
+            return sendCsv(res, "upcoming-bookings.csv", data, ["appointmentStartAt", "appointmentLocalDate", "serviceName", "locationName", "status", "currency", "bookedValueMinorUnits", "reportingCurrency", "reportingValueMinorUnits", "guestType", "source"]);
         }
-        const total = data.reduce((s, b) => s + BigInt(b.bookedValueMinorUnits ?? 0), 0n);
+        const total = data.reduce((s, b) => s + BigInt(b.reportingValueMinorUnits ?? 0), 0n);
         return res.status(200).json({
             period: { from: now.toISOString(), to: until.toISOString(), tz },
             model,
             days,
             count: data.length,
             bookedValueMinorUnits: total.toString(),
-            currency: workspace?.reportingCurrency ?? null,
+            currency: reporting,
+            fx: fxSummary(convert, reporting),
+            warnings: missingFx ? [`${missingFx} booking(s) have no exchange rate to ${reporting} and are left out of the booked value.`] : [],
             byDay: out(groups.byDay).sort((a, b) => a.key.localeCompare(b.key)),
             byWeek: out(groups.byWeek).sort((a, b) => a.key.localeCompare(b.key)),
             byLocation: out(groups.byLocation),

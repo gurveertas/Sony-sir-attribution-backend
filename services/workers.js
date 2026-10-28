@@ -11,7 +11,8 @@
  *               that are behind
  *   every hour  sync ad spend for connected Meta / Google accounts (each account at most every 6 h)
  *               recover FX rates if the automated feed has no stored rows
- *   every day   sync ECB reference FX rates, backfill missing order snapshots, and rebuild rollups
+ *   every hour  sync ECB reference FX rates; when a rate changed, re-convert the sales and bookings it
+ *               affects (services/fxRevaluation.js) and rebuild those companies' rollups
  *   every day   apply data retention
  */
 
@@ -26,6 +27,7 @@ import { syncAccount, platformConfigured } from "./adPlatforms.js";
 import { writeAudit } from "./audit.js";
 import ENV from "../utils/env.js";
 import { findRate, syncLatestRates } from "./fx.js";
+import { applyRateChanges } from "./fxRevaluation.js";
 import "./rollups.js"; // registers the rollup job handlers
 
 const timers = [];
@@ -83,14 +85,17 @@ registerJobHandler("fxrates.sync", async () => {
         touched.add(order.workspaceId);
     }
     for (const workspaceId of touched) await requestRebuild(workspaceId, "fx_rates");
-    console.info("[fx] daily rates synced", { ...result, backfilled });
-    return { ...result, backfilled };
+    // dynamic FX: re-convert the sales and bookings the changed rates affect (both FX modes)
+    const revalued = await applyRateChanges(result.changedDates ?? [], result.currencies ?? []);
+    console.info("[fx] rates synced", { date: result.date, written: result.written, changedDates: result.changedDates?.length ?? 0, backfilled, ...revalued, companies: undefined });
+    return { ...result, backfilled, ...revalued };
 });
 
 function fxRateSweep() {
     if (!ENV.FX_AUTO_SYNC_ENABLED) return;
-    const day = new Date().toISOString().slice(0, 10);
-    enqueueJob("fxrates.sync", { day });
+    // hourly: the ECB publishes once per working day (~16:00 CET); a run that finds no change writes nothing
+    const now = new Date().toISOString();
+    enqueueJob("fxrates.sync", { day: now.slice(0, 13) });
 }
 
 async function recoverEmptyFxRates() {
@@ -139,8 +144,7 @@ export function startWorkers() {
     every(10 * 60_000, rollupSweep, "rollup sweep")();
     every(60 * 60_000, adSpendSweep, "ad spend sweep");
     every(60 * 60_000, recoverEmptyFxRates, "FX empty-table recovery")();
-    every(24 * 60 * 60_000, fxRateSweep, "FX rate sync")();
-    fxRateSweep();
+    every(60 * 60_000, fxRateSweep, "FX rate sync")();
     every(24 * 60 * 60_000, async () => {
         await applyRetention();
         await purgeFinishedJobs(14);

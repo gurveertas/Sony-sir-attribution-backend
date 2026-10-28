@@ -113,6 +113,7 @@ function paramsFor(workspace, fromDay, toDay) {
         locationId: null,
         includeTest: false,
         refundsBy: "refund_date",
+        fxMode: workspace.fxRateMode || "transaction_date",
     };
 }
 
@@ -244,6 +245,8 @@ export async function readRollups(params, { locationId = null } = {}) {
     const { workspace, range } = params;
     if ((params.locationIds?.length ?? 0) > 1) return null;
     if (!range.dayAligned || params.includeTest || params.refundsBy !== "refund_date" || params.currency !== (workspace.reportingCurrency || "USD")) return null;
+    // rollups hold amounts converted with the company's FX mode; another mode is computed live
+    if ((params.fxMode ?? "transaction_date") !== (workspace.fxRateMode || "transaction_date")) return null;
     if (!(await isFresh(workspace, range.fromDay, range.toDay))) return null;
     const t = tenantDb(db, workspace.id);
     let daily = await t.DailyRollup.where((x) => x.day.gte(range.fromDay)).where((x) => x.day.lte(range.toDay)).all();

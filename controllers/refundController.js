@@ -15,7 +15,7 @@ import { tenantDb } from "../services/tenantDb.js";
 import { ingestRefund } from "../services/ingestion.js";
 import { sendError, wantsCsv, sendCsv, paginate, sortDesc } from "../services/http.js";
 import { ATTRIBUTION_MODELS, DEFAULT_MODEL } from "../services/attributionEngine.js";
-import { allowedLocationFilter } from "../services/metrics.js";
+import { allowedLocationFilter, makeConverter, fxSummary } from "../services/metrics.js";
 import { resolveListWindow } from "./reportsController.js";
 import { primarySource } from "./orderController.js";
 
@@ -82,8 +82,20 @@ export const listRefunds = async (req, res) => {
         const { data: pageRows, pagination } = exporting ? { data: refunds, pagination: null } : paginate(refunds, req, "refundedAt");
         const locations = new Map((await t.Location.all()).map((l) => [l.id, l.name]));
 
+        // total in the reporting currency: each refund at its order's rate (or the latest rate), like the reports
+        const reporting = workspace?.reportingCurrency || "USD";
+        const fxMode = ["transaction_date", "latest"].includes(req.query.fxMode) ? req.query.fxMode : workspace?.fxRateMode || "transaction_date";
+        const convert = makeConverter(db, reporting, fxMode);
+        const reportingAmount = new Map();
         let totalMinor = 0n;
-        for (const r of refunds) totalMinor += BigInt(r.amountMinorUnits ?? 0);
+        let missingFx = 0;
+        for (const r of refunds) {
+            const o = orders.get(r.orderId);
+            const v = await convert(r.amountMinorUnits, r.currency || o?.currency || reporting, String(o?.orderedAt ?? r.refundedAt).slice(0, 10), o?.fxRateToReporting, o?.reportingCurrency);
+            reportingAmount.set(r.id, v);
+            if (v === null) missingFx++;
+            else totalMinor += v;
+        }
 
         const data = pageRows.map((r) => {
             const o = orders.get(r.orderId);
@@ -94,6 +106,7 @@ export const listRefunds = async (req, res) => {
                 refundedAt: r.refundedAt,
                 amountMinorUnits: BigInt(r.amountMinorUnits ?? 0).toString(),
                 currency: r.currency,
+                reportingAmountMinorUnits: reportingAmount.get(r.id)?.toString() ?? null,
                 reason: r.reason ?? null,
                 orderId: r.orderId,
                 orderExternalId: o?.externalId ?? null,
@@ -114,7 +127,7 @@ export const listRefunds = async (req, res) => {
                 "orderNetMinorUnits", "customerId", "locationName", "source", "campaign", "model",
             ]);
         }
-        return res.status(200).json({ model, data, pagination, totals: { refunds: refunds.length, amountMinorUnits: totalMinor.toString(), currency: workspace?.reportingCurrency ?? null }, lastUpdated: new Date().toISOString() });
+        return res.status(200).json({ model, data, pagination, totals: { refunds: refunds.length, amountMinorUnits: totalMinor.toString(), currency: reporting, missingFx }, fx: fxSummary(convert, reporting), lastUpdated: new Date().toISOString() });
     } catch (error) {
         return sendError(res, error, "listRefunds");
     }
