@@ -221,23 +221,43 @@ test("the hourly FX job: the provider changes a rate, and the affected sale is r
     await import("../services/workers.js"); // registers the fxrates.sync handler (no timers started)
     const { enqueueJob } = await import("../services/jobs.js");
     const d = daysAgo(6);
-    let eurUsd = 1.1;
-    const eurInr = 88;
+    let usdInr = 80;
     const original = globalThis.fetch;
-    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ base: "EUR", start_date: daysAgo(45), end_date: today, rates: { [d]: { USD: eurUsd, INR: eurInr } } }) });
+    globalThis.fetch = async (input) => {
+        if (!String(input).includes("frankfurter")) return { ok: false, status: 404, json: async () => ({}) }; // no secondary rates in this test
+        return { ok: true, status: 200, json: async () => ({ base: "USD", start_date: daysAgo(45), end_date: today, rates: { [d]: { INR: usdInr } } }) };
+    };
     try {
         await enqueueJob("fxrates.sync", { day: "t1" });
         await ingestOrder(WS, { externalId: "J1", orderedAt: `${d}T10:00:00Z`, currency: "USD", grossAmount: 100 });
-        const first = T.Order[0].fxRateToReporting;
-        assert.ok(Math.abs(first - eurInr / 1.1) < 1e-9, "USD→INR derived through EUR");
+        assert.equal(T.Order[0].fxRateToReporting, 80);
 
-        eurUsd = 1.0; // the dollar strengthens against the euro on that day (revised publication)
+        usdInr = 88; // the ECB revises that day's rate
         const out = await enqueueJob("fxrates.sync", { day: "t2" });
         assert.deepEqual(out.changedDates, [d]);
         assert.equal(out.ordersRepriced, 1);
-        assert.ok(Math.abs(T.Order[0].fxRateToReporting - 88) < 1e-9);
+        assert.equal(T.Order[0].fxRateToReporting, 88);
         assert.equal((await summary(d, d)).revenue.netMinorUnits, "880000");
     } finally {
         globalThis.fetch = original;
     }
+});
+
+// ── viewing in another currency ─────────────────────────────────────────────
+
+test("a company reporting in INR can view the same figures in USD (?currency=USD), with either FX mode", async () => {
+    const d = daysAgo(8);
+    T.FxRate = [rate(d, 80), rate(today, 90)];
+    await ingestOrder(WS, { externalId: "V1", orderedAt: `${d}T10:00:00Z`, currency: "INR", grossAmount: 8000 });
+    await ingestOrder(WS, { externalId: "V2", orderedAt: `${d}T11:00:00Z`, currency: "USD", grossAmount: 50 });
+    const inr = await summary(d, d);
+    assert.equal(inr.currency, "INR");
+    assert.equal(inr.revenue.netMinorUnits, String(800000 + 400000), "8,000 INR + 50 USD × 80");
+    const usd = await summary(d, d, { currency: "USD" });
+    assert.equal(usd.currency, "USD");
+    assert.equal(usd.revenue.netMinorUnits, String(10000 + 5000), "8,000 INR ÷ 80 = 100 USD, plus 50 USD");
+    const usdToday = await summary(d, d, { currency: "USD", fxMode: "latest" });
+    assert.equal(usdToday.revenue.netMinorUnits, String(Math.round(800000 / 90) + 5000));
+    const up = await report(listRefunds, { currency: "USD" });
+    assert.equal(up.totals.currency, "USD");
 });

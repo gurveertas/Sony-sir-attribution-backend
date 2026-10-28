@@ -83,7 +83,8 @@ export const listRefunds = async (req, res) => {
         const locations = new Map((await t.Location.all()).map((l) => [l.id, l.name]));
 
         // total in the reporting currency: each refund at its order's rate (or the latest rate), like the reports
-        const reporting = workspace?.reportingCurrency || "USD";
+        // ?currency=USD shows the figures in another currency (the viewer's choice); default: reporting currency
+        const reporting = /^[A-Za-z]{3}$/.test(String(req.query.currency ?? "")) ? String(req.query.currency).toUpperCase() : workspace?.reportingCurrency || "USD";
         const fxMode = ["transaction_date", "latest"].includes(req.query.fxMode) ? req.query.fxMode : workspace?.fxRateMode || "transaction_date";
         const convert = makeConverter(db, reporting, fxMode);
         const reportingAmount = new Map();

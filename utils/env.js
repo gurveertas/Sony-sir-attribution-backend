@@ -56,7 +56,8 @@ export default ENV;
 //   META_APP_ID / META_APP_SECRET, GOOGLE_ADS_CLIENT_ID / GOOGLE_ADS_CLIENT_SECRET / GOOGLE_ADS_DEVELOPER_TOKEN
 //                       enable the ad-spend OAuth connections.
 //   DISABLE_BACKGROUND_WORKERS=true  do not start the event queue / scheduler in this process.
-//   FX_AUTO_SYNC_ENABLED=false       disable the daily ECB-reference FX feed (manual uploads remain available).
+//   FX_AUTO_SYNC_ENABLED=false       disable the hourly FX feeds (manual uploads remain available).
+//   FX_SECONDARY_SOURCE_ENABLED=false  only use ECB rates (no rates for AED, SAR, ... unless uploaded).
 ENV.IDENTITY_HASH_KEY = process.env.IDENTITY_HASH_KEY || null;
 // asftas.vercel.app (no dash) has no deployment (Vercel answers 404 DEPLOYMENT_NOT_FOUND): never use it.
 ENV.FRONTEND_URL = (process.env.FRONTEND_URL || "https://asf-tas.vercel.app").replace(/\/+$/, "");
@@ -69,6 +70,8 @@ ENV.GOOGLE_ADS_DEVELOPER_TOKEN = process.env.GOOGLE_ADS_DEVELOPER_TOKEN || null;
 ENV.DISABLE_BACKGROUND_WORKERS = String(process.env.DISABLE_BACKGROUND_WORKERS ?? "false").toLowerCase() === "true";
 if (process.env.VERCEL === "1") ENV.DISABLE_BACKGROUND_WORKERS = true;
 ENV.FX_AUTO_SYNC_ENABLED = String(process.env.FX_AUTO_SYNC_ENABLED ?? "true").toLowerCase() !== "false";
+// second free public source (fawazahmed0/exchange-api) for currencies the ECB does not publish (AED, SAR, ...)
+ENV.FX_SECONDARY_SOURCE_ENABLED = String(process.env.FX_SECONDARY_SOURCE_ENABLED ?? "true").toLowerCase() !== "false";
 
 if (!process.env.FRONTEND_URL) {
     console.warn(`[config] FRONTEND_URL is not set: links in emails (invites, verification, password reset) fall back to ${ENV.FRONTEND_URL} when the request does not say which dashboard it came from. Set FRONTEND_URL to your dashboard's address.`);

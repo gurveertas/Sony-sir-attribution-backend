@@ -3,15 +3,31 @@
  * are reproducible." The rate used for an order is stored on the order at ingestion time
  * (Order.fxRateToReporting) and never changes afterwards unless an admin backfills a missing one.
  *
- * Rates live in the FxRate table (date, base, quote, rate), loaded by an admin upload or a feed.
- * Lookup prefers a direct/inverse pair, then derives a cross rate through the daily EUR reference.
- * Rates may fall back to the most recent earlier date within 7 days.
+ * Rates live in the FxRate table (date, base, quote, rate), loaded by an admin upload or two free,
+ * keyless public APIs, all fetched per 1 US dollar (FX_BASE):
+ *   1. Frankfurter: ECB reference rates (~30 currencies, each working day)
+ *   2. fawazahmed0/exchange-api (jsDelivr CDN, Cloudflare mirror): 150+ currencies, daily, public domain.
+ *      Used ONLY for currencies the ECB does not publish (e.g. AED, SAR, QAR, KWD, PKR, NGN, VND).
+ * Precedence: manual upload > ECB > secondary. A source never overwrites a higher one.
+ * Lookup prefers a direct/inverse pair, then a cross rate through USD (then EUR, for rows stored before
+ * the USD base). Rates may fall back to the most recent earlier date within 7 days.
  */
 
 const MAX_STALENESS_DAYS = 7;
 const RATE_HISTORY_DAYS = 45;
 const FX_PROVIDER_URL = "https://api.frankfurter.dev/v1";
 const AUTOMATED_RATE_SOURCE = "frankfurter";
+const SECONDARY_RATE_SOURCE = "currency-api";
+const SECONDARY_URLS = (tag) => [
+    `https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@${tag}/v1/currencies/usd.min.json`,
+    `https://${tag}.currency-api.pages.dev/v1/currencies/usd.min.json`,
+];
+/** All automated rates are stored per 1 US dollar. */
+export const FX_BASE = "USD";
+const CROSS_PIVOTS = ["USD", "EUR"];
+/** Higher wins: a source never overwrites a row from a higher one. */
+const SOURCE_RANK = { [SECONDARY_RATE_SOURCE]: 1, [AUTOMATED_RATE_SOURCE]: 2 }; // anything else (manual, admin_upload) = 3
+const rankOf = (source) => SOURCE_RANK[source] ?? 3;
 
 const addDaysIso = (day, n) => {
     const d = new Date(`${day}T00:00:00Z`);
@@ -56,24 +72,23 @@ export async function findRateWithDate(orm, day, base, quote) {
 
     for (let i = 0; i <= MAX_STALENESS_DAYS; i++) {
         const d = addDaysIso(day, -i);
-
-        const eurToBase = b === "EUR"
-            ? 1
-            : Number((await orm.FxRate.where({ date: d, base: "EUR", quote: b }).first())?.rate ?? 0);
-        const baseToEur = b === "EUR"
-            ? 1
-            : Number((await orm.FxRate.where({ date: d, base: b, quote: "EUR" }).first())?.rate ?? 0);
-        const eurToQuote = q === "EUR"
-            ? 1
-            : Number((await orm.FxRate.where({ date: d, base: "EUR", quote: q }).first())?.rate ?? 0);
-        const quoteToEur = q === "EUR"
-            ? 1
-            : Number((await orm.FxRate.where({ date: d, base: q, quote: "EUR" }).first())?.rate ?? 0);
-        const basePerEur = eurToBase > 0 ? eurToBase : baseToEur > 0 ? 1 / baseToEur : 0;
-        const quotePerEur = eurToQuote > 0 ? eurToQuote : quoteToEur > 0 ? 1 / quoteToEur : 0;
-        if (basePerEur > 0 && quotePerEur > 0) return { rate: quotePerEur / basePerEur, date: d };
+        for (const pivot of CROSS_PIVOTS) {
+            const basePerPivot = await perPivot(orm, d, pivot, b);
+            if (!(basePerPivot > 0)) continue;
+            const quotePerPivot = await perPivot(orm, d, pivot, q);
+            if (quotePerPivot > 0) return { rate: quotePerPivot / basePerPivot, date: d };
+        }
     }
     return null;
+}
+
+/** Units of `currency` per 1 `pivot` on day `d` (stored either way round), or 0. */
+async function perPivot(orm, d, pivot, currency) {
+    if (currency === pivot) return 1;
+    const fwd = Number((await orm.FxRate.where({ date: d, base: pivot, quote: currency }).first())?.rate ?? 0);
+    if (fwd > 0) return fwd;
+    const inv = Number((await orm.FxRate.where({ date: d, base: currency, quote: pivot }).first())?.rate ?? 0);
+    return inv > 0 ? 1 / inv : 0;
 }
 
 /** Date of the newest stored rate on or before `day` (what "latest rate" means today), or null. */
@@ -124,28 +139,52 @@ async function fetchJson(fetchImpl, url) {
     return response.json();
 }
 
+/** Write one automated rate unless a higher-ranked source already owns that row. */
+async function writeAutomated(orm, rate, source, counters) {
+    const existing = await orm.FxRate.where({ date: rate.date, base: rate.base, quote: rate.quote }).first();
+    if (existing && rankOf(existing.source) > rankOf(source)) {
+        counters.preserved++;
+        return;
+    }
+    if (existing && existing.source === source && Number(existing.rate) === rate.rate) return;
+    try {
+        await upsertRates(orm, [rate], source);
+    } catch (error) {
+        if (error?.code !== "23505" && error?.code !== "P2002") throw error;
+        const concurrent = await orm.FxRate.where({ date: rate.date, base: rate.base, quote: rate.quote }).first();
+        if (!concurrent) throw error;
+        if (rankOf(concurrent.source) > rankOf(source)) {
+            counters.preserved++;
+            return;
+        }
+        await orm.FxRate.where({ id: concurrent.id }).update({ rate: rate.rate, source });
+    }
+    counters.written++;
+    counters.changedDates.add(rate.date);
+}
+
 /**
- * Fetch a rolling 45-day ECB reference history through Frankfurter. Storing EUR reference pairs
- * lets findRate derive any supported cross-currency rate. Only automated rows are refreshed;
- * manually uploaded rates remain authoritative.
+ * Fetch a rolling 45-day history of USD-based rates: ECB reference rates through Frankfurter, then the
+ * secondary source for every other currency. Manually uploaded rates always remain authoritative.
+ * A secondary-source failure never fails the sync (the ECB rates are still stored).
  */
-export async function syncLatestRates(orm, fetchImpl = globalThis.fetch) {
+export async function syncLatestRates(orm, fetchImpl = globalThis.fetch, { secondary = true } = {}) {
     if (typeof fetchImpl !== "function") throw new Error("FX provider fetch is unavailable");
 
     const today = new Date();
     const end = today.toISOString().slice(0, 10);
     today.setUTCDate(today.getUTCDate() - RATE_HISTORY_DAYS);
     const start = today.toISOString().slice(0, 10);
-    const result = await fetchJson(fetchImpl, `${FX_PROVIDER_URL}/${start}..${end}?base=EUR`);
+    const result = await fetchJson(fetchImpl, `${FX_PROVIDER_URL}/${start}..${end}?base=${FX_BASE}`);
     if (
-        result?.base !== "EUR" ||
+        result?.base !== FX_BASE ||
         !/^\d{4}-\d{2}-\d{2}$/.test(result?.start_date ?? "") ||
         !/^\d{4}-\d{2}-\d{2}$/.test(result?.end_date ?? "") ||
         !result.rates ||
         typeof result.rates !== "object" ||
         Array.isArray(result.rates)
     ) {
-        throw new Error("FX provider returned invalid EUR reference rates");
+        throw new Error(`FX provider returned invalid ${FX_BASE} reference rates`);
     }
 
     const rates = Object.entries(result.rates).flatMap(([date, dailyRates]) => {
@@ -153,46 +192,99 @@ export async function syncLatestRates(orm, fetchImpl = globalThis.fetch) {
             throw new Error("FX provider returned an invalid daily rate entry");
         }
         return Object.entries(dailyRates)
-            .filter(([quote]) => /^[A-Z]{3}$/.test(quote) && quote !== "EUR")
-            .map(([quote, value]) => ({ date, base: "EUR", quote, rate: Number(value) }));
+            .filter(([quote]) => /^[A-Z]{3}$/.test(quote) && quote !== FX_BASE)
+            .map(([quote, value]) => ({ date, base: FX_BASE, quote, rate: Number(value) }));
     });
     if (!rates.length || rates.some((rate) => !Number.isFinite(rate.rate) || rate.rate <= 0)) {
         throw new Error("FX provider returned no valid currency rates");
     }
 
-    let written = 0;
-    let preserved = 0;
-    const changedDates = new Set();
-    for (const rate of rates) {
-        const existing = await orm.FxRate.where({ date: rate.date, base: rate.base, quote: rate.quote }).first();
-        if (existing && existing.source !== AUTOMATED_RATE_SOURCE) {
-            preserved++;
-            continue;
-        }
-        if (existing && Number(existing.rate) === rate.rate) continue;
+    const counters = { written: 0, preserved: 0, changedDates: new Set() };
+    for (const rate of rates) await writeAutomated(orm, rate, AUTOMATED_RATE_SOURCE, counters);
+    const ecbCurrencies = new Set([FX_BASE, ...rates.map((rate) => rate.quote)]);
+
+    let secondaryResult = null;
+    if (secondary) {
         try {
-            written += await upsertRates(orm, [rate], AUTOMATED_RATE_SOURCE);
-            changedDates.add(rate.date);
+            secondaryResult = await syncSecondaryRates(orm, { skip: ecbCurrencies, counters }, fetchImpl);
         } catch (error) {
-            if (error?.code !== "23505" && error?.code !== "P2002") throw error;
-            const concurrent = await orm.FxRate.where({ date: rate.date, base: rate.base, quote: rate.quote }).first();
-            if (!concurrent) throw error;
-            if (concurrent.source !== AUTOMATED_RATE_SOURCE) {
-                preserved++;
-                continue;
-            }
-            await orm.FxRate.where({ id: concurrent.id }).update({ rate: rate.rate, source: AUTOMATED_RATE_SOURCE });
-            written++;
-            changedDates.add(rate.date);
+            secondaryResult = { error: String(error?.message ?? error) };
+            console.error("[fx] secondary source failed:", secondaryResult.error);
         }
     }
+
     return {
+        base: FX_BASE,
         startDate: result.start_date,
         date: result.end_date,
-        currencies: [...new Set(["EUR", ...rates.map((rate) => rate.quote)])].sort(),
-        written,
-        preserved,
+        currencies: [...new Set([...ecbCurrencies, ...(secondaryResult?.currencies ?? [])])].sort(),
+        written: counters.written,
+        preserved: counters.preserved,
         /** days whose rates were added or changed by this sync (sales and bookings on them may move) */
-        changedDates: [...changedDates].sort(),
+        changedDates: [...counters.changedDates].sort(),
+        secondary: secondaryResult ? { currencies: secondaryResult.currencies?.length ?? 0, date: secondaryResult.date ?? null, error: secondaryResult.error ?? null } : null,
     };
+}
+
+const ISO_CURRENCIES = (() => {
+    try {
+        return new Set(Intl.supportedValuesOf("currency"));
+    } catch {
+        return null; // very old runtimes: accept any 3-letter code
+    }
+})();
+
+async function fetchSecondary(fetchImpl, tag) {
+    let lastError = null;
+    for (const url of SECONDARY_URLS(tag)) {
+        try {
+            const body = await fetchJson(fetchImpl, url);
+            if (!body || typeof body.usd !== "object" || !/^\d{4}-\d{2}-\d{2}$/.test(body.date ?? "")) throw new Error("unexpected response");
+            return body;
+        } catch (error) {
+            lastError = error;
+        }
+    }
+    throw new Error(`secondary FX source unavailable: ${lastError?.message ?? "no response"}`);
+}
+
+/**
+ * USD→X rates from the secondary source, for currencies the ECB does not cover. Fetches "latest", then
+ * fills up to `days` missing earlier days (each past day is fetched once; its file never changes).
+ */
+export async function syncSecondaryRates(orm, { skip = [], days = 7, counters = null } = {}, fetchImpl = globalThis.fetch) {
+    const covered = new Set([...skip].map((c) => String(c).toUpperCase()));
+    covered.add(FX_BASE);
+    const c = counters ?? { written: 0, preserved: 0, changedDates: new Set() };
+    const currencies = new Set();
+    const wanted = ["latest"];
+    const today = new Date().toISOString().slice(0, 10);
+    for (let i = 1; i <= days; i++) wanted.push(addDaysIso(today, -i));
+
+    let latestDate = null;
+    for (const tag of wanted) {
+        if (tag !== "latest") {
+            if (tag === latestDate) continue;
+            const have = await orm.FxRate.where({ date: tag, base: FX_BASE, source: SECONDARY_RATE_SOURCE }).first();
+            if (have) continue;
+        }
+        let body;
+        try {
+            body = await fetchSecondary(fetchImpl, tag);
+        } catch (error) {
+            if (tag === "latest") throw error;
+            continue; // a missing historical file is not an error
+        }
+        if (tag === "latest") latestDate = body.date;
+        for (const [code, value] of Object.entries(body.usd)) {
+            const quote = code.toUpperCase();
+            if (!/^[A-Z]{3}$/.test(quote) || covered.has(quote)) continue;
+            if (ISO_CURRENCIES && !ISO_CURRENCIES.has(quote)) continue; // skip crypto, metals, retired codes
+            const rate = Number(value);
+            if (!Number.isFinite(rate) || rate <= 0) continue;
+            currencies.add(quote);
+            await writeAutomated(orm, { date: body.date, base: FX_BASE, quote, rate }, SECONDARY_RATE_SOURCE, c);
+        }
+    }
+    return { source: SECONDARY_RATE_SOURCE, date: latestDate, currencies: [...currencies].sort(), written: c.written, preserved: c.preserved, changedDates: [...c.changedDates].sort() };
 }

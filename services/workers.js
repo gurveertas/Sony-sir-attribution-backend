@@ -59,7 +59,7 @@ registerJobHandler("attribution.rerun", async ({ workspaceId, from = null, to = 
 registerJobHandler("adspend.sync", ({ workspaceId, accountId }) => syncAccount(workspaceId, accountId));
 
 registerJobHandler("fxrates.sync", async () => {
-    const result = await syncLatestRates(db.orm.public);
+    const result = await syncLatestRates(db.orm.public, globalThis.fetch, { secondary: ENV.FX_SECONDARY_SOURCE_ENABLED });
     const backfillFrom = `${result.startDate}T00:00:00.000Z`;
     const candidates = (
         await db.orm.public.Order

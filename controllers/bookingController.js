@@ -168,7 +168,8 @@ export const listUpcomingBookings = async (req, res) => {
 
         const { byBooking, locations } = await decorate(t, rows, model);
         // booked values in the reporting currency, with the company's FX mode (dynamic: follows rate changes)
-        const reporting = workspace?.reportingCurrency || "USD";
+        // ?currency=USD shows the figures in another currency (the viewer's choice); default: reporting currency
+        const reporting = /^[A-Za-z]{3}$/.test(String(req.query.currency ?? "")) ? String(req.query.currency).toUpperCase() : workspace?.reportingCurrency || "USD";
         const fxMode = ["transaction_date", "latest"].includes(req.query.fxMode) ? req.query.fxMode : workspace?.fxRateMode || "transaction_date";
         const convert = makeConverter(db, reporting, fxMode);
         let missingFx = 0;
