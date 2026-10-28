@@ -18,7 +18,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'00a26e30edbfae1438bf77de5f7864cafb6363dfd318055fdba3542d3d7b847a'>;
+  StorageHashBase<'e52574009bec24f60b410e08c7a84a4b9967e265e0c06027e97e99c4e13fa7c4'>;
 export type ExecutionHash =
   ExecutionHashBase<'935b8e3839cec610114891de01c9f3d8c400a994fe186554cb101181ffb510da'>;
 export type ProfileHash =
@@ -730,6 +730,7 @@ export type FieldOutputTypes = {
       readonly deletedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly emailVerificationExpires: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly emailVerificationHash: CodecTypes['pg/text@1']['output'] | null;
+      readonly fxRateMode: 'transaction_date' | 'latest';
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly industry: CodecTypes['pg/text@1']['output'] | null;
       readonly lookbackDays: CodecTypes['pg/int4@1']['output'];
@@ -1250,6 +1251,7 @@ export type FieldInputTypes = {
       readonly deletedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly emailVerificationExpires: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly emailVerificationHash: CodecTypes['pg/text@1']['input'] | null;
+      readonly fxRateMode: 'transaction_date' | 'latest';
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly industry: CodecTypes['pg/text@1']['input'] | null;
       readonly lookbackDays: CodecTypes['pg/int4@1']['input'];
@@ -1770,6 +1772,7 @@ export type StorageColumnTypes = {
       readonly deletedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly emailVerificationExpires: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly emailVerificationHash: CodecTypes['pg/text@1']['output'] | null;
+      readonly fxRateMode: 'transaction_date' | 'latest';
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly industry: CodecTypes['pg/text@1']['output'] | null;
       readonly lookbackDays: CodecTypes['pg/int4@1']['output'];
@@ -2290,6 +2293,7 @@ export type StorageColumnInputTypes = {
       readonly deletedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly emailVerificationExpires: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly emailVerificationHash: CodecTypes['pg/text@1']['input'] | null;
+      readonly fxRateMode: 'transaction_date' | 'latest';
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly industry: CodecTypes['pg/text@1']['input'] | null;
       readonly lookbackDays: CodecTypes['pg/int4@1']['input'];
@@ -2919,6 +2923,7 @@ export namespace Models {
     deletedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
     emailVerificationExpires: CodecTypes['pg/timestamptz-string@1']['output'] | null;
     emailVerificationHash: CodecTypes['pg/text@1']['output'] | null;
+    fxRateMode: 'transaction_date' | 'latest';
     id: CodecTypes['pg/text@1']['output'];
     industry: CodecTypes['pg/text@1']['output'] | null;
     lookbackDays: CodecTypes['pg/int4@1']['output'];
@@ -7100,6 +7105,16 @@ type ContractBase = Omit<
                   readonly nullable: true;
                   readonly many: false;
                 };
+                readonly fxRateMode: {
+                  readonly dataType: 'pg/text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', 'transaction_date'>;
+                  };
+                  readonly many: false;
+                };
                 readonly id: {
                   readonly dataType: 'pg/text';
                   readonly codecId: 'pg/text@1';
@@ -7324,6 +7339,10 @@ type ContractBase = Omit<
                 'time_decay',
                 'position_based',
               ];
+            };
+            readonly FxRateMode: {
+              readonly kind: 'valueSet';
+              readonly values: readonly ['transaction_date', 'latest'];
             };
             readonly MatchMethod: {
               readonly kind: 'valueSet';
@@ -11065,6 +11084,10 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly fxRateMode: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly id: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -11437,6 +11460,7 @@ type ContractBase = Omit<
                 readonly deletedAt: { readonly column: 'deletedAt' };
                 readonly emailVerificationExpires: { readonly column: 'emailVerificationExpires' };
                 readonly emailVerificationHash: { readonly column: 'emailVerificationHash' };
+                readonly fxRateMode: { readonly column: 'fxRateMode' };
                 readonly id: { readonly column: 'id' };
                 readonly industry: { readonly column: 'industry' };
                 readonly lookbackDays: { readonly column: 'lookbackDays' };
@@ -11562,6 +11586,13 @@ type ContractBase = Omit<
               { readonly name: 'linear'; readonly value: 'linear' },
               { readonly name: 'time_decay'; readonly value: 'time_decay' },
               { readonly name: 'position_based'; readonly value: 'position_based' },
+            ];
+          };
+          readonly FxRateMode: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'transaction_date'; readonly value: 'transaction_date' },
+              { readonly name: 'latest'; readonly value: 'latest' },
             ];
           };
           readonly MatchMethod: {

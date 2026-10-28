@@ -396,6 +396,19 @@
               }
             ]
           },
+          "FxRateMode": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "transaction_date",
+                "value": "transaction_date"
+              },
+              {
+                "name": "latest",
+                "value": "latest"
+              }
+            ]
+          },
           "MatchMethod": {
             "codecId": "pg/text@1",
             "members": [
@@ -6331,6 +6344,19 @@
                   "kind": "scalar"
                 }
               },
+              "fxRateMode": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "FxRateMode",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -6882,6 +6908,9 @@
                 },
                 "emailVerificationHash": {
                   "column": "emailVerificationHash"
+                },
+                "fxRateMode": {
+                  "column": "fxRateMode"
                 },
                 "id": {
                   "column": "id"
@@ -11622,6 +11651,11 @@
                   "prefix": "Workspace_defaultModel_check"
                 },
                 {
+                  "expression": "\"fxRateMode\" IN ('transaction_date', 'latest')",
+                  "name": "Workspace_fxRateMode_check_940df6b9",
+                  "prefix": "Workspace_fxRateMode_check"
+                },
+                {
                   "expression": "\"status\" IN ('pending', 'active', 'suspended', 'closed')",
                   "name": "Workspace_status_check_4dc0f300",
                   "prefix": "Workspace_status_check"
@@ -11704,6 +11738,21 @@
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
                   "nullable": true
+                },
+                "fxRateMode": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "default": {
+                    "kind": "literal",
+                    "value": "transaction_date"
+                  },
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "FxRateMode",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "id": {
                   "codecId": "pg/text@1",
@@ -11958,6 +12007,13 @@
                 "position_based"
               ]
             },
+            "FxRateMode": {
+              "kind": "valueSet",
+              "values": [
+                "transaction_date",
+                "latest"
+              ]
+            },
             "MatchMethod": {
               "kind": "valueSet",
               "values": [
@@ -12034,7 +12090,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "00a26e30edbfae1438bf77de5f7864cafb6363dfd318055fdba3542d3d7b847a"
+    "storageHash": "e52574009bec24f60b410e08c7a84a4b9967e265e0c06027e97e99c4e13fa7c4"
   },
   "execution": {
     "executionHash": "935b8e3839cec610114891de01c9f3d8c400a994fe186554cb101181ffb510da",
