@@ -71,8 +71,10 @@ export const startPlanCheckout = async (req, res) => {
         const workspace = await orm().Workspace.where({ id: workspaceId }).first();
         if (!workspace) return res.status(404).json({ message: "Workspace not found", code: "not_found" });
 
-        const { plan, interval = "monthly", successUrl, cancelUrl } = req.body ?? {};
-        if (!plan) {
+        const requestedPlan = (req.body?.plan || req.body?.tier || "").toLowerCase();
+        const { interval = "monthly", successUrl, cancelUrl, returnUrl } = req.body ?? {};
+
+        if (!requestedPlan) {
             return res.status(400).json({
                 message: "plan is required (choose 'pro' or 'ultra')",
                 code: "validation_error",
@@ -82,13 +84,21 @@ export const startPlanCheckout = async (req, res) => {
         const session = await createCheckoutSession({
             workspace,
             user: req.user,
-            planTier: plan,
+            planTier: requestedPlan,
             interval,
-            successUrl,
+            successUrl: successUrl || returnUrl,
             cancelUrl,
         });
 
-        return res.status(200).json({ data: session });
+        return res.status(200).json({
+            data: session,
+            checkoutUrl: session.checkoutUrl,
+            url: session.checkoutUrl,
+            sessionId: session.sessionId,
+            id: session.sessionId,
+            plan: session.plan,
+            interval: session.interval,
+        });
     } catch (error) {
         return sendError(res, error, "startPlanCheckout");
     }
@@ -104,13 +114,17 @@ export const openCustomerPortal = async (req, res) => {
         const workspace = await orm().Workspace.where({ id: workspaceId }).first();
         if (!workspace) return res.status(404).json({ message: "Workspace not found", code: "not_found" });
 
-        const { returnUrl } = req.body ?? {};
+        const { returnUrl, successUrl } = req.body ?? {};
         const portal = await createCustomerPortalSession({
             workspace,
-            returnUrl,
+            returnUrl: returnUrl || successUrl,
         });
 
-        return res.status(200).json({ data: portal });
+        return res.status(200).json({
+            data: portal,
+            portalUrl: portal.portalUrl,
+            url: portal.portalUrl,
+        });
     } catch (error) {
         return sendError(res, error, "openCustomerPortal");
     }

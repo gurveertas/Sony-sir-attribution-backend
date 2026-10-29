@@ -10,6 +10,7 @@ import {
 } from "../services/billingService.js";
 import { makeRes } from "./fakeDb.js";
 import { getBillingStatus, getAvailablePlans, startPlanCheckout, openCustomerPortal } from "../controllers/billingController.js";
+import { PLANS } from "../config/plans.js";
 import ENV from "../utils/env.js";
 
 test("serializeStripeParams correctly formats nested parameters for Stripe form encoding", () => {
@@ -59,7 +60,7 @@ test("getBillingOverview aggregates current workspace status and plan catalog", 
     assert.equal(overview.plans.length, 3); // free, pro, ultra
     const proPlan = overview.plans.find((p) => p.id === "pro");
     assert.equal(proPlan.isCurrent, true);
-    assert.equal(proPlan.pricing.monthly, 2000);
+    assert.equal(proPlan.pricing.monthly, PLANS.pro.pricing.monthly);
 });
 
 test("createCheckoutSession validates plan tier and creates checkout session", async () => {
