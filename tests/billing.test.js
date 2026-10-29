@@ -9,7 +9,7 @@ import {
     createCustomerPortalSession,
 } from "../services/billingService.js";
 import { makeRes } from "./fakeDb.js";
-import { getBillingStatus, startPlanCheckout, openCustomerPortal } from "../controllers/billingController.js";
+import { getBillingStatus, getAvailablePlans, startPlanCheckout, openCustomerPortal } from "../controllers/billingController.js";
 import ENV from "../utils/env.js";
 
 test("serializeStripeParams correctly formats nested parameters for Stripe form encoding", () => {
@@ -135,5 +135,20 @@ test("createCustomerPortalSession requires billing customer and generates portal
     assert.equal(portal.portalUrl, "https://billing.stripe.com/session_portal_123");
 
     ENV.STRIPE_SECRET_KEY = origKey;
+});
+
+test("getAvailablePlans returns catalog of free, pro, and ultra plans", async () => {
+    const req = { user: null };
+    const res = makeRes();
+
+    await getAvailablePlans(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.ok(Array.isArray(res.body.data));
+    assert.equal(res.body.data.length, 3);
+    const tiers = res.body.data.map((p) => p.id);
+    assert.ok(tiers.includes("free"));
+    assert.ok(tiers.includes("pro"));
+    assert.ok(tiers.includes("ultra"));
 });
 

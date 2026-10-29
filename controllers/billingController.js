@@ -9,6 +9,7 @@
 
 import { db } from "../src/prisma/db.js";
 import { sendError } from "../services/http.js";
+import { PLANS } from "../config/plans.js";
 import {
     getBillingOverview,
     createCheckoutSession,
@@ -16,6 +17,33 @@ import {
 } from "../services/billingService.js";
 
 const orm = () => db.orm.public;
+
+/**
+ * GET /api/workspace/billing/plans or GET /api/billing/plans
+ * Returns the catalog of plans (Free, Pro, Ultra) with pricing, limits, and features.
+ */
+export const getAvailablePlans = async (req, res) => {
+    try {
+        const workspaceId = req.user?.workspaceId;
+        let currentPlan = null;
+        if (workspaceId) {
+            const workspace = await orm().Workspace.where({ id: workspaceId }).first();
+            currentPlan = workspace?.plan || "free";
+        }
+        const plans = Object.values(PLANS).map((p) => ({
+            id: p.id,
+            name: p.name,
+            description: p.description,
+            pricing: p.pricing,
+            limits: p.limits,
+            features: p.features,
+            isCurrent: currentPlan ? p.id === currentPlan : false,
+        }));
+        return res.status(200).json({ data: plans });
+    } catch (error) {
+        return sendError(res, error, "getAvailablePlans");
+    }
+};
 
 /**
  * GET /api/workspace/billing

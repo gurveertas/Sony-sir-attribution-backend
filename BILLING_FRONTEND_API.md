@@ -68,9 +68,102 @@ Called on app initialization to read the user session and workspace status.
 
 ## 3. Dedicated Billing Endpoints
 
-Mounted under `/api/workspace/billing/*`. Requires cookie authentication (`protectRoute`).
+Mounted under `/api/workspace/billing/*` (authenticated) and `/api/billing/*` (public).
 
-### A. Get Full Billing Overview
+### A. Get Available Plans Catalog
+Use this to fetch the list of available subscription tiers, pricing, limits, and features (e.g. for a pricing page or upgrade modal).
+
+- **Endpoints**:
+  - `GET /api/workspace/billing/plans` (Authenticated: returns `isCurrent: true` for the active workspace's tier)
+  - `GET /api/billing/plans` (Public: accessible without login)
+- **Allowed Roles**: Any authenticated user (or public for `/api/billing/plans`)
+
+#### Response `200 OK`
+```json
+{
+  "data": [
+    {
+      "id": "free",
+      "name": "Free",
+      "description": "Essential multi-touch attribution for early-stage and growing stores.",
+      "pricing": {
+        "monthly": { "amount": 0, "currency": "USD", "formatted": "$0" },
+        "annually": { "amount": 0, "currency": "USD", "formatted": "$0", "discountPercent": 0 }
+      },
+      "limits": {
+        "monthlyOrders": 1000,
+        "adAccounts": 1,
+        "teamMembers": 2,
+        "retentionMonths": 3,
+        "customChannelRules": 3,
+        "locations": 1
+      },
+      "features": {
+        "models": ["first_touch", "last_touch", "last_non_direct", "linear"],
+        "csvExports": false,
+        "apiAccess": false,
+        "prioritySupport": false,
+        "customLookback": false
+      },
+      "isCurrent": true
+    },
+    {
+      "id": "pro",
+      "name": "Pro",
+      "description": "Advanced attribution models, automated ad spend import, and higher volume.",
+      "pricing": {
+        "monthly": { "amount": 2000, "currency": "USD", "formatted": "$2,000/mo" },
+        "annually": { "amount": 20000, "currency": "USD", "formatted": "$20,000/yr", "discountPercent": 17 }
+      },
+      "limits": {
+        "monthlyOrders": 15000,
+        "adAccounts": 5,
+        "teamMembers": 5,
+        "retentionMonths": 13,
+        "customChannelRules": 20,
+        "locations": 5
+      },
+      "features": {
+        "models": ["first_touch", "last_touch", "last_non_direct", "linear", "position_based", "time_decay"],
+        "csvExports": true,
+        "apiAccess": true,
+        "prioritySupport": false,
+        "customLookback": true
+      },
+      "isCurrent": false
+    },
+    {
+      "id": "ultra",
+      "name": "Ultra",
+      "description": "Data-driven algorithmic attribution, massive order volumes, multi-location, and priority support.",
+      "pricing": {
+        "monthly": { "amount": 4000, "currency": "USD", "formatted": "$4,000/mo" },
+        "annually": { "amount": 40000, "currency": "USD", "formatted": "$40,000/yr", "discountPercent": 17 }
+      },
+      "limits": {
+        "monthlyOrders": 100000,
+        "adAccounts": 50,
+        "teamMembers": 50,
+        "retentionMonths": 36,
+        "customChannelRules": 100,
+        "locations": 50
+      },
+      "features": {
+        "models": ["first_touch", "last_touch", "last_non_direct", "linear", "position_based", "time_decay", "data_driven"],
+        "csvExports": true,
+        "apiAccess": true,
+        "prioritySupport": true,
+        "customLookback": true
+      },
+      "isCurrent": false
+    }
+  ]
+}
+```
+
+---
+
+### B. Get Full Billing Overview (Subscription + Usage + Plans)
 Use this to populate the **Billing & Subscription** settings page, plan cards, usage bar, and invoice management link.
 
 - **Endpoint**: `GET /api/workspace/billing`

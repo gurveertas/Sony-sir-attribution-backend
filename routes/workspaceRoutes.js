@@ -31,6 +31,7 @@ import {
 } from "../controllers/workspaceController.js";
 import {
     getBillingStatus,
+    getAvailablePlans,
     startPlanCheckout,
     openCustomerPortal,
 } from "../controllers/billingController.js";
@@ -60,6 +61,7 @@ router.patch("/settings", requireRole("company_admin"), updateWorkspaceSettings)
 
 // ── Billing / Subscriptions ────────────────────────────────────────────────
 router.get("/billing", requireRole("company_admin", "company_viewer"), getBillingStatus);
+router.get("/billing/plans", requireRole("company_admin", "company_viewer"), getAvailablePlans);
 router.post("/billing/checkout", requireRole("company_admin"), startPlanCheckout);
 router.post("/billing/portal", requireRole("company_admin"), openCustomerPortal);
 

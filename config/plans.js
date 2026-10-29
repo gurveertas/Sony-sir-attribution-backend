@@ -57,8 +57,8 @@ export const PLANS = {
         name: "Pro Plan",
         description: "For growing businesses scaling their multi-channel marketing",
         pricing: {
-            monthly: 10,
-            annually: 100, // ~1,666 / mo (save ~17%)
+            monthly: 2000,
+            annually: 20000, // $1,666 / mo (2 months free, save ~17%)
             currency: "USD",
         },
         limits: {
@@ -82,8 +82,8 @@ export const PLANS = {
         name: "Ultra Plan",
         description: "For high-volume brands needing advanced attribution and dedicated support",
         pricing: {
-            monthly: 20,
-            annually: 210, // ~3,333 / mo (save ~17%)
+            monthly: 4000,
+            annually: 40000, // $3,333 / mo (2 months free, save ~17%)
             currency: "USD",
         },
         limits: {
