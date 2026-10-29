@@ -373,7 +373,21 @@ export const sendMe = async (req, res) => {
         let workspace = null;
         if (req.user.workspaceId) {
             const w = await db.orm.public.Workspace.where({ id: req.user.workspaceId }).first();
-            workspace = w ? { id: w.id, name: w.name, status: w.status, timezone: w.timezone, reportingCurrency: w.reportingCurrency, defaultModel: w.defaultModel, weekStart: w.weekStart } : null;
+            workspace = w ? {
+                id: w.id,
+                name: w.name,
+                status: w.status,
+                timezone: w.timezone,
+                reportingCurrency: w.reportingCurrency,
+                defaultModel: w.defaultModel,
+                weekStart: w.weekStart,
+                plan: w.plan || "free",
+                subscriptionStatus: w.subscriptionStatus || "active",
+                billingInterval: w.billingInterval || null,
+                trialEndsAt: w.trialEndsAt || null,
+                currentPeriodEndsAt: w.currentPeriodEndsAt || null,
+                cancelAtPeriodEnd: Boolean(w.cancelAtPeriodEnd),
+            } : null;
         }
         return res.status(200).json({
             message: "Token decoded",

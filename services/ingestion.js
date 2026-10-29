@@ -536,6 +536,13 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
                 await tt.CheckoutSession.where({ id: resolved.session.id }).update({ consumedAt: iso(input.orderedAt), consumedOrderId: created.id });
             }
 
+            if (ctxData.workspace) {
+                const updatedCount = (ctxData.workspace.currentPeriodOrderCount ?? 0) + 1;
+                await tx.orm.public.Workspace.where({ id: workspaceId }).update({
+                    currentPeriodOrderCount: updatedCount,
+                });
+            }
+
             const creditRows = buildCreditRows({
                 workspaceId,
                 orderId: created.id,
@@ -585,6 +592,12 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
     if (input.visitorId) visitorRecordId = (await t.Visitor.where({ visitorId: input.visitorId }).first())?.id ?? null;
     else if (resolved.session) visitorRecordId = resolved.session.visitorId;
 
+    const orderLimit = ctxData.workspace?.monthlyOrderLimit ?? 1000;
+    const currentCount = (ctxData.workspace?.currentPeriodOrderCount ?? 0) + 1;
+    const planWarning = currentCount > orderLimit
+        ? `Monthly order limit (${orderLimit}) exceeded on ${ctxData.workspace?.plan || "free"} plan. Please upgrade to Pro or Ultra.`
+        : null;
+
     return {
         statusCode: 201,
         body: orderResponse(order, {
@@ -596,6 +609,7 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
             orderItemIds: items.map((i) => i.id),
             attributionCreditIds: credits.map((c) => c.id),
             fxRateToReporting: order.fxRateToReporting ?? null,
+            ...(planWarning ? { planWarning } : {}),
         }),
     };
 }

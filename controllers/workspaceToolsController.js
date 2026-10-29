@@ -31,6 +31,7 @@ import { sendError, wantsCsv, sendCsv, paginate, sortDesc } from "../services/ht
 import { requestRebuild } from "../services/rollups.js";
 import jwt from "jsonwebtoken";
 import { frontendBase, safeFrontendOrigin } from "../utils/frontendUrl.js";
+import { getWorkspacePlan } from "../services/planService.js";
 
 const ws = (req) => req.user.workspaceId;
 const auditUser = (req, action, extra = {}) =>
@@ -109,6 +110,21 @@ export const startAdOAuth = async (req, res) => {
     try {
         const platform = req.params.platform;
         if (!["meta", "google"].includes(platform)) return res.status(400).json({ message: "platform must be meta or google", code: "validation_error" });
+
+        const workspace = await db.orm.public.Workspace.where({ id: ws(req) }).first();
+        const plan = getWorkspacePlan(workspace);
+        const t = tenantDb(db, ws(req));
+        const currentAccounts = await t.AdAccount.all();
+        if (currentAccounts.length >= plan.limits.adAccounts) {
+            return res.status(403).json({
+                message: `Your current plan (${plan.name}) allows up to ${plan.limits.adAccounts} connected ad accounts. Please upgrade your plan to connect more.`,
+                code: "plan_limit_reached",
+                limit: "adAccounts",
+                current: currentAccounts.length,
+                max: plan.limits.adAccounts,
+            });
+        }
+
         return res.status(200).json({ url: authorizationUrl(platform, { workspaceId: ws(req), userId: req.user.id, returnTo: frontendBase(req) }) });
     } catch (error) {
         return sendError(res, error, "startAdOAuth");

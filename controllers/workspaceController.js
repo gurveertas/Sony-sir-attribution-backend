@@ -24,6 +24,7 @@ import { sendCsv, wantsCsv, paginate, sortDesc } from "../services/http.js";
 import ENV from "../utils/env.js";
 import { requestRebuild } from "../services/rollups.js";
 import { frontendBase } from "../utils/frontendUrl.js";
+import { getWorkspacePlan } from "../services/planService.js";
 
 const orm = () => db.orm.public;
 
@@ -160,6 +161,20 @@ export const inviteUser = async (req, res) => {
         }
         if (!["company_admin", "company_viewer"].includes(role)) {
             return res.status(400).json({ message: "role must be company_admin or company_viewer" });
+        }
+
+        const workspace = await orm().Workspace.where({ id: workspaceId }).first();
+        const plan = getWorkspacePlan(workspace);
+        const members = await orm().User.where({ workspaceId }).all();
+        const pendingInvites = (await orm().Invite.where({ workspaceId }).all()).filter((i) => inviteStatus(i) === "pending");
+        if ((members.length + pendingInvites.length) >= plan.limits.teamMembers) {
+            return res.status(403).json({
+                message: `Your current plan (${plan.name}) allows up to ${plan.limits.teamMembers} team members. Please upgrade your plan to invite more users.`,
+                code: "plan_limit_reached",
+                limit: "teamMembers",
+                current: members.length + pendingInvites.length,
+                max: plan.limits.teamMembers,
+            });
         }
 
         const normalizedEmail = email.trim().toLowerCase();
@@ -536,6 +551,18 @@ export const createLocation = async (req, res) => {
         const workspaceId = req.user.workspaceId;
         const { name, timezone, currency, externalIds } = req.body ?? {};
         const workspace = await orm().Workspace.where({ id: workspaceId }).first();
+        const plan = getWorkspacePlan(workspace);
+        const locations = await orm().Location.where({ workspaceId }).all();
+        if (locations.length >= plan.limits.locations) {
+            return res.status(403).json({
+                message: `Your current plan (${plan.name}) allows up to ${plan.limits.locations} locations. Please upgrade your plan to add more.`,
+                code: "plan_limit_reached",
+                limit: "locations",
+                current: locations.length,
+                max: plan.limits.locations,
+            });
+        }
+
         if (!name || !String(name).trim()) return res.status(400).json({ message: "name is required" });
         const tz = timezone || workspace?.timezone || "UTC";
         if (!isValidTimeZone(tz)) return res.status(400).json({ message: "timezone must be an IANA name such as Asia/Dubai" });
@@ -641,6 +668,19 @@ export const listChannelMappingRules = async (req, res) => {
 export const createChannelMappingRule = async (req, res) => {
     try {
         const workspaceId = req.user.workspaceId;
+        const workspace = await orm().Workspace.where({ id: workspaceId }).first();
+        const plan = getWorkspacePlan(workspace);
+        const rules = await orm().ChannelMappingRule.where({ workspaceId }).all();
+        if (rules.length >= plan.limits.customChannelRules) {
+            return res.status(403).json({
+                message: `Your current plan (${plan.name}) allows up to ${plan.limits.customChannelRules} custom channel mapping rules. Please upgrade your plan to add more.`,
+                code: "plan_limit_reached",
+                limit: "customChannelRules",
+                current: rules.length,
+                max: plan.limits.customChannelRules,
+            });
+        }
+
         const { priority, match, channel, isActive = true } = req.body ?? {};
         const problem = validateRule({ priority, match, channel });
         if (problem) return res.status(400).json({ message: problem });

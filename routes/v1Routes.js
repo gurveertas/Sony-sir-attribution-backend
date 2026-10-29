@@ -24,6 +24,7 @@ import { createBooking, updateBooking, listBookings, listUpcomingBookings } from
 import { createRefund, listRefunds } from "../controllers/refundController.js";
 import { listCustomers, getCustomerJourney, mergeCustomersApi } from "../controllers/customerController.js";
 import * as reports from "../controllers/reportsController.js";
+import { requireModelAllowed } from "../middlewares/planGuards.js";
 
 const router = Router();
 
@@ -58,7 +59,7 @@ const read = readAccess("company_admin", "company_viewer");
 
 router.get("/orders", ...read, listOrders);
 router.get("/refunds", ...read, listRefunds);
-router.get("/orders/:id/attribution", ...read, getOrderAttribution);
+router.get("/orders/:id/attribution", ...read, requireModelAllowed, getOrderAttribution);
 router.get("/customers", ...read, listCustomers);
 router.get("/customers/:id/journey", ...read, getCustomerJourney);
 router.get("/bookings", ...read, listBookings);
@@ -80,7 +81,7 @@ for (const [path, handler] of Object.entries({
     coverage: reports.getCoverageReport,
     "data-quality": reports.getDataQualityReport,
 })) {
-    router.get(`/reports/${path}`, ...read, handler);
+    router.get(`/reports/${path}`, ...read, requireModelAllowed, handler);
 }
 
 export default router;

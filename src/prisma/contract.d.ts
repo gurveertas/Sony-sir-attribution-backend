@@ -18,7 +18,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'e52574009bec24f60b410e08c7a84a4b9967e265e0c06027e97e99c4e13fa7c4'>;
+  StorageHashBase<'445ee87c3a1328225c5b43a1b0d42b23a1931258f54f052a186dc4cbaf08fe5f'>;
 export type ExecutionHash =
   ExecutionHashBase<'935b8e3839cec610114891de01c9f3d8c400a994fe186554cb101181ffb510da'>;
 export type ProfileHash =
@@ -716,9 +716,15 @@ export type FieldOutputTypes = {
     readonly Workspace: {
       readonly approvedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly approvedBy: CodecTypes['pg/text@1']['output'] | null;
+      readonly billingCustomerId: CodecTypes['pg/text@1']['output'] | null;
+      readonly billingInterval: 'monthly' | 'annually' | null;
+      readonly cancelAtPeriodEnd: CodecTypes['pg/bool@1']['output'];
       readonly consentMode: 'off' | 'opt_in' | 'opt_out';
       readonly country: Varchar<2>;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+      readonly currentPeriodEnd: CodecTypes['pg/timestamptz-string@1']['output'] | null;
+      readonly currentPeriodOrderCount: CodecTypes['pg/int4@1']['output'];
+      readonly currentPeriodStart: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly dataRegion: CodecTypes['pg/text@1']['output'] | null;
       readonly defaultModel:
         | 'first_touch'
@@ -735,8 +741,9 @@ export type FieldOutputTypes = {
       readonly industry: CodecTypes['pg/text@1']['output'] | null;
       readonly lookbackDays: CodecTypes['pg/int4@1']['output'];
       readonly lookbackOverrides: CodecTypes['pg/json@1']['output'] | null;
+      readonly monthlyOrderLimit: CodecTypes['pg/int4@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
-      readonly plan: CodecTypes['pg/text@1']['output'] | null;
+      readonly plan: 'free' | 'pro' | 'ultra';
       readonly rawRetentionMonths: CodecTypes['pg/int4@1']['output'];
       readonly reportingCurrency: Varchar<3>;
       readonly rollupsBuiltAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
@@ -744,9 +751,12 @@ export type FieldOutputTypes = {
       readonly rollupsDataToken: CodecTypes['pg/text@1']['output'] | null;
       readonly slug: CodecTypes['pg/text@1']['output'];
       readonly status: 'pending' | 'active' | 'suspended' | 'closed';
+      readonly subscriptionId: CodecTypes['pg/text@1']['output'] | null;
+      readonly subscriptionStatus: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid';
       readonly suspendedReason: CodecTypes['pg/text@1']['output'] | null;
       readonly taxIncludedInRevenue: CodecTypes['pg/bool@1']['output'];
       readonly timezone: CodecTypes['pg/text@1']['output'];
+      readonly trialEndsAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly websiteUrl: CodecTypes['pg/text@1']['output'] | null;
       readonly weekStart: CodecTypes['pg/int2@1']['output'];
@@ -1237,9 +1247,15 @@ export type FieldInputTypes = {
     readonly Workspace: {
       readonly approvedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly approvedBy: CodecTypes['pg/text@1']['input'] | null;
+      readonly billingCustomerId: CodecTypes['pg/text@1']['input'] | null;
+      readonly billingInterval: 'monthly' | 'annually' | null;
+      readonly cancelAtPeriodEnd: CodecTypes['pg/bool@1']['input'];
       readonly consentMode: 'off' | 'opt_in' | 'opt_out';
       readonly country: CodecTypes['sql/varchar@1']['input'];
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
+      readonly currentPeriodEnd: CodecTypes['pg/timestamptz-string@1']['input'] | null;
+      readonly currentPeriodOrderCount: CodecTypes['pg/int4@1']['input'];
+      readonly currentPeriodStart: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly dataRegion: CodecTypes['pg/text@1']['input'] | null;
       readonly defaultModel:
         | 'first_touch'
@@ -1256,8 +1272,9 @@ export type FieldInputTypes = {
       readonly industry: CodecTypes['pg/text@1']['input'] | null;
       readonly lookbackDays: CodecTypes['pg/int4@1']['input'];
       readonly lookbackOverrides: CodecTypes['pg/json@1']['input'] | null;
+      readonly monthlyOrderLimit: CodecTypes['pg/int4@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
-      readonly plan: CodecTypes['pg/text@1']['input'] | null;
+      readonly plan: 'free' | 'pro' | 'ultra';
       readonly rawRetentionMonths: CodecTypes['pg/int4@1']['input'];
       readonly reportingCurrency: CodecTypes['sql/varchar@1']['input'];
       readonly rollupsBuiltAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
@@ -1265,9 +1282,12 @@ export type FieldInputTypes = {
       readonly rollupsDataToken: CodecTypes['pg/text@1']['input'] | null;
       readonly slug: CodecTypes['pg/text@1']['input'];
       readonly status: 'pending' | 'active' | 'suspended' | 'closed';
+      readonly subscriptionId: CodecTypes['pg/text@1']['input'] | null;
+      readonly subscriptionStatus: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid';
       readonly suspendedReason: CodecTypes['pg/text@1']['input'] | null;
       readonly taxIncludedInRevenue: CodecTypes['pg/bool@1']['input'];
       readonly timezone: CodecTypes['pg/text@1']['input'];
+      readonly trialEndsAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly websiteUrl: CodecTypes['pg/text@1']['input'] | null;
       readonly weekStart: CodecTypes['pg/int2@1']['input'];
@@ -1758,9 +1778,15 @@ export type StorageColumnTypes = {
     readonly Workspace: {
       readonly approvedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly approvedBy: CodecTypes['pg/text@1']['output'] | null;
+      readonly billingCustomerId: CodecTypes['pg/text@1']['output'] | null;
+      readonly billingInterval: 'monthly' | 'annually' | null;
+      readonly cancelAtPeriodEnd: CodecTypes['pg/bool@1']['output'];
       readonly consentMode: 'off' | 'opt_in' | 'opt_out';
       readonly country: Varchar<2>;
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+      readonly currentPeriodEnd: CodecTypes['pg/timestamptz-string@1']['output'] | null;
+      readonly currentPeriodOrderCount: CodecTypes['pg/int4@1']['output'];
+      readonly currentPeriodStart: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly dataRegion: CodecTypes['pg/text@1']['output'] | null;
       readonly defaultModel:
         | 'first_touch'
@@ -1777,8 +1803,9 @@ export type StorageColumnTypes = {
       readonly industry: CodecTypes['pg/text@1']['output'] | null;
       readonly lookbackDays: CodecTypes['pg/int4@1']['output'];
       readonly lookbackOverrides: CodecTypes['pg/json@1']['output'] | null;
+      readonly monthlyOrderLimit: CodecTypes['pg/int4@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
-      readonly plan: CodecTypes['pg/text@1']['output'] | null;
+      readonly plan: 'free' | 'pro' | 'ultra';
       readonly rawRetentionMonths: CodecTypes['pg/int4@1']['output'];
       readonly reportingCurrency: Varchar<3>;
       readonly rollupsBuiltAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
@@ -1786,9 +1813,12 @@ export type StorageColumnTypes = {
       readonly rollupsDataToken: CodecTypes['pg/text@1']['output'] | null;
       readonly slug: CodecTypes['pg/text@1']['output'];
       readonly status: 'pending' | 'active' | 'suspended' | 'closed';
+      readonly subscriptionId: CodecTypes['pg/text@1']['output'] | null;
+      readonly subscriptionStatus: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid';
       readonly suspendedReason: CodecTypes['pg/text@1']['output'] | null;
       readonly taxIncludedInRevenue: CodecTypes['pg/bool@1']['output'];
       readonly timezone: CodecTypes['pg/text@1']['output'];
+      readonly trialEndsAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
       readonly websiteUrl: CodecTypes['pg/text@1']['output'] | null;
       readonly weekStart: CodecTypes['pg/int2@1']['output'];
@@ -2279,9 +2309,15 @@ export type StorageColumnInputTypes = {
     readonly Workspace: {
       readonly approvedAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly approvedBy: CodecTypes['pg/text@1']['input'] | null;
+      readonly billingCustomerId: CodecTypes['pg/text@1']['input'] | null;
+      readonly billingInterval: 'monthly' | 'annually' | null;
+      readonly cancelAtPeriodEnd: CodecTypes['pg/bool@1']['input'];
       readonly consentMode: 'off' | 'opt_in' | 'opt_out';
       readonly country: CodecTypes['sql/varchar@1']['input'];
       readonly createdAt: CodecTypes['pg/timestamptz-string@1']['input'];
+      readonly currentPeriodEnd: CodecTypes['pg/timestamptz-string@1']['input'] | null;
+      readonly currentPeriodOrderCount: CodecTypes['pg/int4@1']['input'];
+      readonly currentPeriodStart: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly dataRegion: CodecTypes['pg/text@1']['input'] | null;
       readonly defaultModel:
         | 'first_touch'
@@ -2298,8 +2334,9 @@ export type StorageColumnInputTypes = {
       readonly industry: CodecTypes['pg/text@1']['input'] | null;
       readonly lookbackDays: CodecTypes['pg/int4@1']['input'];
       readonly lookbackOverrides: CodecTypes['pg/json@1']['input'] | null;
+      readonly monthlyOrderLimit: CodecTypes['pg/int4@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
-      readonly plan: CodecTypes['pg/text@1']['input'] | null;
+      readonly plan: 'free' | 'pro' | 'ultra';
       readonly rawRetentionMonths: CodecTypes['pg/int4@1']['input'];
       readonly reportingCurrency: CodecTypes['sql/varchar@1']['input'];
       readonly rollupsBuiltAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
@@ -2307,9 +2344,12 @@ export type StorageColumnInputTypes = {
       readonly rollupsDataToken: CodecTypes['pg/text@1']['input'] | null;
       readonly slug: CodecTypes['pg/text@1']['input'];
       readonly status: 'pending' | 'active' | 'suspended' | 'closed';
+      readonly subscriptionId: CodecTypes['pg/text@1']['input'] | null;
+      readonly subscriptionStatus: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid';
       readonly suspendedReason: CodecTypes['pg/text@1']['input'] | null;
       readonly taxIncludedInRevenue: CodecTypes['pg/bool@1']['input'];
       readonly timezone: CodecTypes['pg/text@1']['input'];
+      readonly trialEndsAt: CodecTypes['pg/timestamptz-string@1']['input'] | null;
       readonly updatedAt: CodecTypes['pg/timestamptz-string@1']['input'];
       readonly websiteUrl: CodecTypes['pg/text@1']['input'] | null;
       readonly weekStart: CodecTypes['pg/int2@1']['input'];
@@ -2914,9 +2954,15 @@ export namespace Models {
   export type public_Workspace = {
     approvedAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
     approvedBy: CodecTypes['pg/text@1']['output'] | null;
+    billingCustomerId: CodecTypes['pg/text@1']['output'] | null;
+    billingInterval: 'monthly' | 'annually' | null;
+    cancelAtPeriodEnd: CodecTypes['pg/bool@1']['output'];
     consentMode: 'off' | 'opt_in' | 'opt_out';
     country: Varchar<2>;
     createdAt: CodecTypes['pg/timestamptz-string@1']['output'];
+    currentPeriodEnd: CodecTypes['pg/timestamptz-string@1']['output'] | null;
+    currentPeriodOrderCount: CodecTypes['pg/int4@1']['output'];
+    currentPeriodStart: CodecTypes['pg/timestamptz-string@1']['output'] | null;
     dataRegion: CodecTypes['pg/text@1']['output'] | null;
     defaultModel:
       'first_touch' | 'last_touch' | 'last_non_direct' | 'linear' | 'time_decay' | 'position_based';
@@ -2928,8 +2974,9 @@ export namespace Models {
     industry: CodecTypes['pg/text@1']['output'] | null;
     lookbackDays: CodecTypes['pg/int4@1']['output'];
     lookbackOverrides: CodecTypes['pg/json@1']['output'] | null;
+    monthlyOrderLimit: CodecTypes['pg/int4@1']['output'];
     name: CodecTypes['pg/text@1']['output'];
-    plan: CodecTypes['pg/text@1']['output'] | null;
+    plan: 'free' | 'pro' | 'ultra';
     rawRetentionMonths: CodecTypes['pg/int4@1']['output'];
     reportingCurrency: Varchar<3>;
     rollupsBuiltAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
@@ -2937,9 +2984,12 @@ export namespace Models {
     rollupsDataToken: CodecTypes['pg/text@1']['output'] | null;
     slug: CodecTypes['pg/text@1']['output'];
     status: 'pending' | 'active' | 'suspended' | 'closed';
+    subscriptionId: CodecTypes['pg/text@1']['output'] | null;
+    subscriptionStatus: 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid';
     suspendedReason: CodecTypes['pg/text@1']['output'] | null;
     taxIncludedInRevenue: CodecTypes['pg/bool@1']['output'];
     timezone: CodecTypes['pg/text@1']['output'];
+    trialEndsAt: CodecTypes['pg/timestamptz-string@1']['output'] | null;
     updatedAt: CodecTypes['pg/timestamptz-string@1']['output'];
     websiteUrl: CodecTypes['pg/text@1']['output'] | null;
     weekStart: CodecTypes['pg/int2@1']['output'];
@@ -7047,6 +7097,28 @@ type ContractBase = Omit<
                   readonly nullable: true;
                   readonly many: false;
                 };
+                readonly billingCustomerId: {
+                  readonly dataType: 'pg/text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                  readonly many: false;
+                };
+                readonly billingInterval: {
+                  readonly dataType: 'pg/text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                  readonly many: false;
+                };
+                readonly cancelAtPeriodEnd: {
+                  readonly dataType: 'pg/bool';
+                  readonly codecId: 'pg/bool@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/bool@1', false>;
+                  };
+                  readonly many: false;
+                };
                 readonly consentMode: {
                   readonly dataType: 'pg/text';
                   readonly codecId: 'pg/text@1';
@@ -7069,6 +7141,28 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/timestamptz-string@1';
                   readonly nullable: false;
                   readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                  readonly many: false;
+                };
+                readonly currentPeriodEnd: {
+                  readonly dataType: 'pg/timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: true;
+                  readonly many: false;
+                };
+                readonly currentPeriodOrderCount: {
+                  readonly dataType: 'pg/int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/int4@1', 0>;
+                  };
+                  readonly many: false;
+                };
+                readonly currentPeriodStart: {
+                  readonly dataType: 'pg/timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: true;
                   readonly many: false;
                 };
                 readonly dataRegion: {
@@ -7143,6 +7237,16 @@ type ContractBase = Omit<
                   readonly nullable: true;
                   readonly many: false;
                 };
+                readonly monthlyOrderLimit: {
+                  readonly dataType: 'pg/int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/int4@1', 1000>;
+                  };
+                  readonly many: false;
+                };
                 readonly name: {
                   readonly dataType: 'pg/text';
                   readonly codecId: 'pg/text@1';
@@ -7152,7 +7256,11 @@ type ContractBase = Omit<
                 readonly plan: {
                   readonly dataType: 'pg/text';
                   readonly codecId: 'pg/text@1';
-                  readonly nullable: true;
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', 'free'>;
+                  };
                   readonly many: false;
                 };
                 readonly rawRetentionMonths: {
@@ -7210,6 +7318,22 @@ type ContractBase = Omit<
                   };
                   readonly many: false;
                 };
+                readonly subscriptionId: {
+                  readonly dataType: 'pg/text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                  readonly many: false;
+                };
+                readonly subscriptionStatus: {
+                  readonly dataType: 'pg/text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', 'active'>;
+                  };
+                  readonly many: false;
+                };
                 readonly suspendedReason: {
                   readonly dataType: 'pg/text';
                   readonly codecId: 'pg/text@1';
@@ -7234,6 +7358,12 @@ type ContractBase = Omit<
                     readonly kind: 'literal';
                     readonly value: DefaultLiteralValue<'pg/text@1', 'UTC'>;
                   };
+                  readonly many: false;
+                };
+                readonly trialEndsAt: {
+                  readonly dataType: 'pg/timestamptz';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                  readonly nullable: true;
                   readonly many: false;
                 };
                 readonly updatedAt: {
@@ -7296,6 +7426,10 @@ type ContractBase = Omit<
             readonly BackgroundJobStatus: {
               readonly kind: 'valueSet';
               readonly values: readonly ['queued', 'running', 'done', 'dead'];
+            };
+            readonly BillingInterval: {
+              readonly kind: 'valueSet';
+              readonly values: readonly ['monthly', 'annually'];
             };
             readonly BookingStatus: {
               readonly kind: 'valueSet';
@@ -7365,9 +7499,17 @@ type ContractBase = Omit<
                 'voided',
               ];
             };
+            readonly PlanTier: {
+              readonly kind: 'valueSet';
+              readonly values: readonly ['free', 'pro', 'ultra'];
+            };
             readonly RawEventStatus: {
               readonly kind: 'valueSet';
               readonly values: readonly ['pending', 'processed', 'failed', 'replaying', 'dead'];
+            };
+            readonly SubscriptionStatus: {
+              readonly kind: 'valueSet';
+              readonly values: readonly ['trialing', 'active', 'past_due', 'canceled', 'unpaid'];
             };
             readonly UserRole: {
               readonly kind: 'valueSet';
@@ -11039,6 +11181,18 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly billingCustomerId: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly billingInterval: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly cancelAtPeriodEnd: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
+              };
               readonly consentMode: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -11053,6 +11207,24 @@ type ContractBase = Omit<
               };
               readonly createdAt: {
                 readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
+              readonly currentPeriodEnd: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
+              };
+              readonly currentPeriodOrderCount: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly currentPeriodStart: {
+                readonly nullable: true;
                 readonly type: {
                   readonly kind: 'scalar';
                   readonly codecId: 'pg/timestamptz-string@1';
@@ -11104,12 +11276,16 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/json@1' };
               };
+              readonly monthlyOrderLimit: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
               readonly name: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly plan: {
-                readonly nullable: true;
+                readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly rawRetentionMonths: {
@@ -11147,6 +11323,14 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly subscriptionId: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly subscriptionStatus: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly suspendedReason: {
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -11158,6 +11342,13 @@ type ContractBase = Omit<
               readonly timezone: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly trialEndsAt: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-string@1';
+                };
               };
               readonly updatedAt: {
                 readonly nullable: false;
@@ -11452,9 +11643,15 @@ type ContractBase = Omit<
               readonly fields: {
                 readonly approvedAt: { readonly column: 'approvedAt' };
                 readonly approvedBy: { readonly column: 'approvedBy' };
+                readonly billingCustomerId: { readonly column: 'billingCustomerId' };
+                readonly billingInterval: { readonly column: 'billingInterval' };
+                readonly cancelAtPeriodEnd: { readonly column: 'cancelAtPeriodEnd' };
                 readonly consentMode: { readonly column: 'consentMode' };
                 readonly country: { readonly column: 'country' };
                 readonly createdAt: { readonly column: 'createdAt' };
+                readonly currentPeriodEnd: { readonly column: 'currentPeriodEnd' };
+                readonly currentPeriodOrderCount: { readonly column: 'currentPeriodOrderCount' };
+                readonly currentPeriodStart: { readonly column: 'currentPeriodStart' };
                 readonly dataRegion: { readonly column: 'dataRegion' };
                 readonly defaultModel: { readonly column: 'defaultModel' };
                 readonly deletedAt: { readonly column: 'deletedAt' };
@@ -11465,6 +11662,7 @@ type ContractBase = Omit<
                 readonly industry: { readonly column: 'industry' };
                 readonly lookbackDays: { readonly column: 'lookbackDays' };
                 readonly lookbackOverrides: { readonly column: 'lookbackOverrides' };
+                readonly monthlyOrderLimit: { readonly column: 'monthlyOrderLimit' };
                 readonly name: { readonly column: 'name' };
                 readonly plan: { readonly column: 'plan' };
                 readonly rawRetentionMonths: { readonly column: 'rawRetentionMonths' };
@@ -11474,9 +11672,12 @@ type ContractBase = Omit<
                 readonly rollupsDataToken: { readonly column: 'rollupsDataToken' };
                 readonly slug: { readonly column: 'slug' };
                 readonly status: { readonly column: 'status' };
+                readonly subscriptionId: { readonly column: 'subscriptionId' };
+                readonly subscriptionStatus: { readonly column: 'subscriptionStatus' };
                 readonly suspendedReason: { readonly column: 'suspendedReason' };
                 readonly taxIncludedInRevenue: { readonly column: 'taxIncludedInRevenue' };
                 readonly timezone: { readonly column: 'timezone' };
+                readonly trialEndsAt: { readonly column: 'trialEndsAt' };
                 readonly updatedAt: { readonly column: 'updatedAt' };
                 readonly websiteUrl: { readonly column: 'websiteUrl' };
                 readonly weekStart: { readonly column: 'weekStart' };
@@ -11534,6 +11735,13 @@ type ContractBase = Omit<
               { readonly name: 'running'; readonly value: 'running' },
               { readonly name: 'done'; readonly value: 'done' },
               { readonly name: 'dead'; readonly value: 'dead' },
+            ];
+          };
+          readonly BillingInterval: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'monthly'; readonly value: 'monthly' },
+              { readonly name: 'annually'; readonly value: 'annually' },
             ];
           };
           readonly BookingStatus: {
@@ -11616,6 +11824,14 @@ type ContractBase = Omit<
               { readonly name: 'voided'; readonly value: 'voided' },
             ];
           };
+          readonly PlanTier: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'free'; readonly value: 'free' },
+              { readonly name: 'pro'; readonly value: 'pro' },
+              { readonly name: 'ultra'; readonly value: 'ultra' },
+            ];
+          };
           readonly RawEventStatus: {
             readonly codecId: 'pg/text@1';
             readonly members: readonly [
@@ -11624,6 +11840,16 @@ type ContractBase = Omit<
               { readonly name: 'failed'; readonly value: 'failed' },
               { readonly name: 'replaying'; readonly value: 'replaying' },
               { readonly name: 'dead'; readonly value: 'dead' },
+            ];
+          };
+          readonly SubscriptionStatus: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'trialing'; readonly value: 'trialing' },
+              { readonly name: 'active'; readonly value: 'active' },
+              { readonly name: 'past_due'; readonly value: 'past_due' },
+              { readonly name: 'canceled'; readonly value: 'canceled' },
+              { readonly name: 'unpaid'; readonly value: 'unpaid' },
             ];
           };
           readonly UserRole: {

@@ -263,6 +263,19 @@
               }
             ]
           },
+          "BillingInterval": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "monthly",
+                "value": "monthly"
+              },
+              {
+                "name": "annually",
+                "value": "annually"
+              }
+            ]
+          },
           "BookingStatus": {
             "codecId": "pg/text@1",
             "members": [
@@ -463,6 +476,23 @@
               }
             ]
           },
+          "PlanTier": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "free",
+                "value": "free"
+              },
+              {
+                "name": "pro",
+                "value": "pro"
+              },
+              {
+                "name": "ultra",
+                "value": "ultra"
+              }
+            ]
+          },
           "RawEventStatus": {
             "codecId": "pg/text@1",
             "members": [
@@ -485,6 +515,31 @@
               {
                 "name": "dead",
                 "value": "dead"
+              }
+            ]
+          },
+          "SubscriptionStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "trialing",
+                "value": "trialing"
+              },
+              {
+                "name": "active",
+                "value": "active"
+              },
+              {
+                "name": "past_due",
+                "value": "past_due"
+              },
+              {
+                "name": "canceled",
+                "value": "canceled"
+              },
+              {
+                "name": "unpaid",
+                "value": "unpaid"
               }
             ]
           },
@@ -6273,6 +6328,33 @@
                   "kind": "scalar"
                 }
               },
+              "billingCustomerId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "billingInterval": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "BillingInterval",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "cancelAtPeriodEnd": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
               "consentMode": {
                 "nullable": false,
                 "type": {
@@ -6298,6 +6380,27 @@
               },
               "createdAt": {
                 "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "currentPeriodEnd": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "kind": "scalar"
+                }
+              },
+              "currentPeriodOrderCount": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "currentPeriodStart": {
+                "nullable": true,
                 "type": {
                   "codecId": "pg/timestamptz-string@1",
                   "kind": "scalar"
@@ -6385,6 +6488,13 @@
                   "kind": "scalar"
                 }
               },
+              "monthlyOrderLimit": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "name": {
                 "nullable": false,
                 "type": {
@@ -6393,10 +6503,16 @@
                 }
               },
               "plan": {
-                "nullable": true,
+                "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "PlanTier",
+                  "namespaceId": "public",
+                  "plane": "domain"
                 }
               },
               "rawRetentionMonths": {
@@ -6457,6 +6573,26 @@
                   "plane": "domain"
                 }
               },
+              "subscriptionId": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "subscriptionStatus": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "SubscriptionStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
               "suspendedReason": {
                 "nullable": true,
                 "type": {
@@ -6475,6 +6611,13 @@
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "trialEndsAt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-string@1",
                   "kind": "scalar"
                 }
               },
@@ -6885,6 +7028,15 @@
                 "approvedBy": {
                   "column": "approvedBy"
                 },
+                "billingCustomerId": {
+                  "column": "billingCustomerId"
+                },
+                "billingInterval": {
+                  "column": "billingInterval"
+                },
+                "cancelAtPeriodEnd": {
+                  "column": "cancelAtPeriodEnd"
+                },
                 "consentMode": {
                   "column": "consentMode"
                 },
@@ -6893,6 +7045,15 @@
                 },
                 "createdAt": {
                   "column": "createdAt"
+                },
+                "currentPeriodEnd": {
+                  "column": "currentPeriodEnd"
+                },
+                "currentPeriodOrderCount": {
+                  "column": "currentPeriodOrderCount"
+                },
+                "currentPeriodStart": {
+                  "column": "currentPeriodStart"
                 },
                 "dataRegion": {
                   "column": "dataRegion"
@@ -6924,6 +7085,9 @@
                 "lookbackOverrides": {
                   "column": "lookbackOverrides"
                 },
+                "monthlyOrderLimit": {
+                  "column": "monthlyOrderLimit"
+                },
                 "name": {
                   "column": "name"
                 },
@@ -6951,6 +7115,12 @@
                 "status": {
                   "column": "status"
                 },
+                "subscriptionId": {
+                  "column": "subscriptionId"
+                },
+                "subscriptionStatus": {
+                  "column": "subscriptionStatus"
+                },
                 "suspendedReason": {
                   "column": "suspendedReason"
                 },
@@ -6959,6 +7129,9 @@
                 },
                 "timezone": {
                   "column": "timezone"
+                },
+                "trialEndsAt": {
+                  "column": "trialEndsAt"
                 },
                 "updatedAt": {
                   "column": "updatedAt"
@@ -11641,6 +11814,11 @@
             "Workspace": {
               "checks": [
                 {
+                  "expression": "\"billingInterval\" IN ('monthly', 'annually')",
+                  "name": "Workspace_billingInterval_check_b99bb0d8",
+                  "prefix": "Workspace_billingInterval_check"
+                },
+                {
                   "expression": "\"consentMode\" IN ('off', 'opt_in', 'opt_out')",
                   "name": "Workspace_consentMode_check_906800ff",
                   "prefix": "Workspace_consentMode_check"
@@ -11656,9 +11834,19 @@
                   "prefix": "Workspace_fxRateMode_check"
                 },
                 {
+                  "expression": "\"plan\" IN ('free', 'pro', 'ultra')",
+                  "name": "Workspace_plan_check_de6646a9",
+                  "prefix": "Workspace_plan_check"
+                },
+                {
                   "expression": "\"status\" IN ('pending', 'active', 'suspended', 'closed')",
                   "name": "Workspace_status_check_4dc0f300",
                   "prefix": "Workspace_status_check"
+                },
+                {
+                  "expression": "\"subscriptionStatus\" IN ('trialing', 'active', 'past_due', 'canceled', 'unpaid')",
+                  "name": "Workspace_subscriptionStatus_check_953112c7",
+                  "prefix": "Workspace_subscriptionStatus_check"
                 }
               ],
               "columns": {
@@ -11671,6 +11859,31 @@
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
                   "nullable": true
+                },
+                "billingCustomerId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "billingInterval": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "BillingInterval",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "cancelAtPeriodEnd": {
+                  "codecId": "pg/bool@1",
+                  "dataType": "pg/bool",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nullable": false
                 },
                 "consentMode": {
                   "codecId": "pg/text@1",
@@ -11703,6 +11916,25 @@
                     "kind": "function"
                   },
                   "nullable": false
+                },
+                "currentPeriodEnd": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
+                },
+                "currentPeriodOrderCount": {
+                  "codecId": "pg/int4@1",
+                  "dataType": "pg/int4",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nullable": false
+                },
+                "currentPeriodStart": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
                 },
                 "dataRegion": {
                   "codecId": "pg/text@1",
@@ -11778,6 +12010,15 @@
                   "dataType": "pg/json",
                   "nullable": true
                 },
+                "monthlyOrderLimit": {
+                  "codecId": "pg/int4@1",
+                  "dataType": "pg/int4",
+                  "default": {
+                    "kind": "literal",
+                    "value": 1000
+                  },
+                  "nullable": false
+                },
                 "name": {
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
@@ -11786,7 +12027,17 @@
                 "plan": {
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
-                  "nullable": true
+                  "default": {
+                    "kind": "literal",
+                    "value": "free"
+                  },
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "PlanTier",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
                 },
                 "rawRetentionMonths": {
                   "codecId": "pg/int4@1",
@@ -11844,6 +12095,26 @@
                     "plane": "storage"
                   }
                 },
+                "subscriptionId": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "nullable": true
+                },
+                "subscriptionStatus": {
+                  "codecId": "pg/text@1",
+                  "dataType": "pg/text",
+                  "default": {
+                    "kind": "literal",
+                    "value": "active"
+                  },
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "SubscriptionStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
                 "suspendedReason": {
                   "codecId": "pg/text@1",
                   "dataType": "pg/text",
@@ -11866,6 +12137,11 @@
                     "value": "UTC"
                   },
                   "nullable": false
+                },
+                "trialEndsAt": {
+                  "codecId": "pg/timestamptz-string@1",
+                  "dataType": "pg/timestamptz",
+                  "nullable": true
                 },
                 "updatedAt": {
                   "codecId": "pg/timestamptz-string@1",
@@ -11955,6 +12231,13 @@
                 "dead"
               ]
             },
+            "BillingInterval": {
+              "kind": "valueSet",
+              "values": [
+                "monthly",
+                "annually"
+              ]
+            },
             "BookingStatus": {
               "kind": "valueSet",
               "values": [
@@ -12035,6 +12318,14 @@
                 "voided"
               ]
             },
+            "PlanTier": {
+              "kind": "valueSet",
+              "values": [
+                "free",
+                "pro",
+                "ultra"
+              ]
+            },
             "RawEventStatus": {
               "kind": "valueSet",
               "values": [
@@ -12043,6 +12334,16 @@
                 "failed",
                 "replaying",
                 "dead"
+              ]
+            },
+            "SubscriptionStatus": {
+              "kind": "valueSet",
+              "values": [
+                "trialing",
+                "active",
+                "past_due",
+                "canceled",
+                "unpaid"
               ]
             },
             "UserRole": {
@@ -12090,7 +12391,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "e52574009bec24f60b410e08c7a84a4b9967e265e0c06027e97e99c4e13fa7c4"
+    "storageHash": "445ee87c3a1328225c5b43a1b0d42b23a1931258f54f052a186dc4cbaf08fe5f"
   },
   "execution": {
     "executionHash": "935b8e3839cec610114891de01c9f3d8c400a994fe186554cb101181ffb510da",

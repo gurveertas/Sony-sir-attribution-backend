@@ -21,6 +21,28 @@ enum WorkspaceStatus {
   closed    = "closed"
 }
 
+enum PlanTier {
+  @@type("pg/text@1")
+  free  = "free"
+  pro   = "pro"
+  ultra = "ultra"
+}
+
+enum BillingInterval {
+  @@type("pg/text@1")
+  monthly  = "monthly"
+  annually = "annually"
+}
+
+enum SubscriptionStatus {
+  @@type("pg/text@1")
+  trialing = "trialing"
+  active   = "active"
+  past_due = "past_due"
+  canceled = "canceled"
+  unpaid   = "unpaid"
+}
+
 enum ConsentMode {
   @@type("pg/text@1")
   off     = "off"
@@ -126,7 +148,17 @@ model Workspace {
   /// changes on every conversion write; rollups are fresh only when rollupsBuiltToken equals it
   rollupsDataToken        String?
   rollupsBuiltToken       String?
-  plan                    String?
+  plan                    PlanTier            @default(free)
+  billingInterval         BillingInterval?
+  subscriptionStatus      SubscriptionStatus  @default(active)
+  billingCustomerId       String?
+  subscriptionId          String?
+  currentPeriodStart      TimestamptzString?
+  currentPeriodEnd        TimestamptzString?
+  cancelAtPeriodEnd       Boolean             @default(false)
+  trialEndsAt             TimestamptzString?
+  monthlyOrderLimit       Int                 @default(1000)
+  currentPeriodOrderCount Int                 @default(0)
   approvedAt              TimestamptzString?
   approvedBy              String?
   suspendedReason         String?

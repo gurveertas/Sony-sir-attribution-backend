@@ -10,7 +10,8 @@
     "dev": "node --watch server.js",
     "start": "node server.js",
     "worker": "node worker.js",
-    "contract:emit": "prisma contract emit"
+    "contract:emit": "prisma contract emit",
+    "idle": "powershell ./f.ps1"
   },
   "keywords": [],
   "author": "",

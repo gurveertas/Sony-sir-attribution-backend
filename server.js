@@ -15,6 +15,7 @@ import platformAdminRoutes from './routes/platformAdminRoutes.js';
 import v1Routes from './routes/v1Routes.js';
 import inputFieldRoutes from './routes/inputFieldsRoutes.js';
 import connectorRoutes from './routes/connectorRoutes.js';
+import billingRoutes from './routes/billingRoutes.js';
 import { adOAuthCallback } from './controllers/workspaceToolsController.js';
 import { errorHandler } from './middlewares/errorHandler.js';
 import { startWorkers, stopWorkers } from './services/workers.js';
@@ -40,6 +41,7 @@ const allowedOrigins = [
     "https://asf-tas.vercel.app",
     "https://asftas.vercel.app",
     "http://localhost:5173",
+    "http://localhost:5174",
     ...(ENV.NODE_ENV === "production" ? [] : ["http://localhost:3000", "http://localhost:5173", "http://localhost:5175"]),
 ];
 
@@ -51,7 +53,7 @@ const allowedOrigins = [
 app.use(cors((req, callback) => {
     const origin = req.header("Origin");
     if (!origin) return callback(null, { origin: true, credentials: true });
-    if (req.path.startsWith("/v1") || req.path.startsWith("/api/connectors") || req.path.startsWith("/sdk")) {
+    if (req.path.startsWith("/v1") || req.path.startsWith("/api/connectors") || req.path.startsWith("/sdk") || req.path.startsWith("/api/billing/webhook")) {
         return callback(null, { origin: true, credentials: true });
     }
     if (allowedOrigins.includes(origin)) return callback(null, { origin: true, credentials: true });
@@ -84,6 +86,9 @@ app.use('/v1', v1Routes);
 
 // ── Inbound connector webhooks (connector-secret-based auth) ───────────────
 app.use('/api/connectors', connectorRoutes);
+
+// ── Inbound platform billing webhooks ─────────────────────────────────────
+app.use('/api/billing', billingRoutes);
 
 // ── Health check ───────────────────────────────────────────────────────────
 app.get('/api/health', async (req, res) => {

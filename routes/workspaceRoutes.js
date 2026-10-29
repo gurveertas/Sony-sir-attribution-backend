@@ -29,12 +29,22 @@ import {
     deleteWebhookEndpoint,
     getAuditLog, listInvites, updateInvite, resendInvite, revokeInvite
 } from "../controllers/workspaceController.js";
+import {
+    getBillingStatus,
+    startPlanCheckout,
+    openCustomerPortal,
+} from "../controllers/billingController.js";
 import * as reports from "../controllers/reportsController.js";
 import { listCustomers, getCustomerJourney, mergeCustomersHandler } from "../controllers/customerController.js";
 import { listOrders, getOrderAttribution } from "../controllers/orderController.js";
 import { listRefunds } from "../controllers/refundController.js";
 import * as tools from "../controllers/workspaceToolsController.js";
 import { listBookings, listUpcomingBookings } from "../controllers/bookingController.js";
+import {
+    requireMinimumPlan,
+    requireModelAllowed,
+    requireFeature,
+} from "../middlewares/planGuards.js";
 
 const router = Router();
 
@@ -47,6 +57,11 @@ router.use(protectRoute);
 // ── Settings (company_admin only) ──────────────────────────────────────────
 router.get("/settings", requireRole("company_admin"), getWorkspaceSettings);
 router.patch("/settings", requireRole("company_admin"), updateWorkspaceSettings);
+
+// ── Billing / Subscriptions ────────────────────────────────────────────────
+router.get("/billing", requireRole("company_admin", "company_viewer"), getBillingStatus);
+router.post("/billing/checkout", requireRole("company_admin"), startPlanCheckout);
+router.post("/billing/portal", requireRole("company_admin"), openCustomerPortal);
 
 // ── Team / Invites ─────────────────────────────────────────────────────────
 router.post("/invites", requireRole("company_admin"), inviteUser);
@@ -122,7 +137,7 @@ router.post("/connectors/:id/events/:eventId/replay", requireRole("company_admin
 
 // ── Dashboard & reports (cookie session; every report also exists under /v1/reports/*) ─────
 const anyRole = requireRole("company_admin", "company_viewer");
-router.get("/dashboard", anyRole, reports.getDashboardOverview);
+router.get("/dashboard", anyRole, requireModelAllowed, reports.getDashboardOverview);
 router.get("/alerts", anyRole, reports.getAlerts);
 for (const [path, handler] of Object.entries({
     dashboard: reports.getDashboardOverview,
@@ -139,21 +154,21 @@ for (const [path, handler] of Object.entries({
     coverage: reports.getCoverageReport,
     "data-quality": reports.getDataQualityReport,
 })) {
-    router.get(`/reports/${path}`, anyRole, handler);
+    router.get(`/reports/${path}`, anyRole, requireModelAllowed, handler);
 }
 
 // ── Customers & journeys ───────────────────────────────────────────────────
 router.post("/customers/merge", requireRole("company_admin"), mergeCustomersHandler);
 router.get("/customers", anyRole, listCustomers);
 router.get("/customers/:id/journey", anyRole, getCustomerJourney);
-router.get("/customers/:id/export", requireRole("company_admin"), tools.exportCustomerData);
+router.get("/customers/:id/export", requireRole("company_admin"), requireFeature("csvExports"), tools.exportCustomerData);
 router.post("/customers/:id/erase", requireRole("company_admin"), tools.eraseCustomerData);
 
 // ── Transactions / orders / bookings ───────────────────────────────────────
 router.get("/transactions", anyRole, listOrders);
 router.get("/orders", anyRole, listOrders);
 router.get("/refunds", anyRole, listRefunds);
-router.get("/orders/:id/attribution", anyRole, getOrderAttribution);
+router.get("/orders/:id/attribution", anyRole, requireModelAllowed, getOrderAttribution);
 router.get("/upcoming", anyRole, listUpcomingBookings);
 router.get("/bookings", anyRole, listBookings);
 
@@ -170,7 +185,7 @@ router.post("/ad-accounts/oauth/:platform/start", requireRole("company_admin"), 
 router.patch("/ad-accounts/:id", requireRole("company_admin"), tools.updateAdAccount);
 router.delete("/ad-accounts/:id", requireRole("company_admin"), tools.deleteAdAccount);
 router.post("/ad-accounts/:id/sync", requireRole("company_admin"), tools.syncAdAccountNow);
-router.post("/ad-spend/upload", requireRole("company_admin"), tools.uploadAdSpend);
+router.post("/ad-spend/upload", requireRole("company_admin"), requireMinimumPlan("pro"), tools.uploadAdSpend);
 router.get("/ad-spend", anyRole, tools.listAdSpend);
 
 // ── Outbound webhooks: delivery log, test, secret rotation ─────────────────
@@ -181,7 +196,7 @@ router.post("/webhooks/:id/rotate-secret", requireRole("company_admin"), tools.r
 router.post("/webhooks/deliveries/:deliveryId/retry", requireRole("company_admin"), tools.retryWebhookDelivery);
 
 // ── Data: export ───────────────────────────────────────────────────────────
-router.get("/data/export", requireRole("company_admin"), tools.exportWorkspaceData);
+router.get("/data/export", requireRole("company_admin"), requireFeature("csvExports"), tools.exportWorkspaceData);
 
 // Close the company account (company admin) / delete it (platform admin, audited purge).
 // Declared last so it never shadows a static path.

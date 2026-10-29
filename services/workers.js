@@ -133,6 +133,28 @@ async function adSpendSweep() {
     }
 }
 
+/** Check for past_due workspaces whose grace period (7 days) has expired and suspend them. */
+export async function subscriptionGracePeriodSweep(client = db) {
+    try {
+        const pastDueWorkspaces = await client.orm.public.Workspace
+            .where({ subscriptionStatus: "past_due", status: "active" })
+            .all();
+        const now = Date.now();
+        const sevenDaysMs = 7 * 24 * 60 * 60_000;
+        for (const w of pastDueWorkspaces) {
+            if (w.currentPeriodEnd && now - new Date(w.currentPeriodEnd).getTime() > sevenDaysMs) {
+                await client.orm.public.Workspace.where({ id: w.id }).update({
+                    status: "suspended",
+                    suspendedReason: "Subscription payment failed (grace period expired)",
+                });
+                console.warn(`[billing] Suspended workspace ${w.id} due to expired grace period`);
+            }
+        }
+    } catch (err) {
+        console.error("[billing] subscriptionGracePeriodSweep error:", err.message);
+    }
+}
+
 let started = false;
 export function startWorkers() {
     if (started) return;
@@ -145,6 +167,7 @@ export function startWorkers() {
     every(60 * 60_000, adSpendSweep, "ad spend sweep");
     every(60 * 60_000, recoverEmptyFxRates, "FX empty-table recovery")();
     every(60 * 60_000, fxRateSweep, "FX rate sync")();
+    every(6 * 60 * 60_000, subscriptionGracePeriodSweep, "subscription grace sweep");
     every(24 * 60 * 60_000, async () => {
         await applyRetention();
         await purgeFinishedJobs(14);

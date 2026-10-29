@@ -73,6 +73,14 @@ ENV.FX_AUTO_SYNC_ENABLED = String(process.env.FX_AUTO_SYNC_ENABLED ?? "true").to
 // second free public source (fawazahmed0/exchange-api) for currencies the ECB does not publish (AED, SAR, ...)
 ENV.FX_SECONDARY_SOURCE_ENABLED = String(process.env.FX_SECONDARY_SOURCE_ENABLED ?? "true").toLowerCase() !== "false";
 
+// ── SaaS Billing (Stripe) ──────────────────────────────────────────────────
+ENV.STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || null;
+ENV.STRIPE_BILLING_WEBHOOK_SECRET = process.env.STRIPE_BILLING_WEBHOOK_SECRET || null;
+ENV.STRIPE_PRICE_ID_PRO_MONTHLY = process.env.STRIPE_PRICE_ID_PRO_MONTHLY || null;
+ENV.STRIPE_PRICE_ID_PRO_ANNUALLY = process.env.STRIPE_PRICE_ID_PRO_ANNUALLY || null;
+ENV.STRIPE_PRICE_ID_ULTRA_MONTHLY = process.env.STRIPE_PRICE_ID_ULTRA_MONTHLY || null;
+ENV.STRIPE_PRICE_ID_ULTRA_ANNUALLY = process.env.STRIPE_PRICE_ID_ULTRA_ANNUALLY || null;
+
 if (!process.env.FRONTEND_URL) {
     console.warn(`[config] FRONTEND_URL is not set: links in emails (invites, verification, password reset) fall back to ${ENV.FRONTEND_URL} when the request does not say which dashboard it came from. Set FRONTEND_URL to your dashboard's address.`);
 }
