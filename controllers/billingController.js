@@ -10,10 +10,12 @@
 import { db } from "../src/prisma/db.js";
 import { sendError } from "../services/http.js";
 import { PLANS } from "../config/plans.js";
+import ENV from "../utils/env.js";
 import {
     getBillingOverview,
     createCheckoutSession,
     createCustomerPortalSession,
+    getStripeClient,
 } from "../services/billingService.js";
 
 const orm = () => db.orm.public;
@@ -47,12 +49,40 @@ export const getAvailablePlans = async (req, res) => {
 
 /**
  * GET /api/workspace/billing
+ * Accepts optional query: ?session_id=cs_... to immediately confirm a just-completed checkout.
  */
 export const getBillingStatus = async (req, res) => {
     try {
         const workspaceId = req.user.workspaceId;
-        const workspace = await orm().Workspace.where({ id: workspaceId }).first();
+        let workspace = await orm().Workspace.where({ id: workspaceId }).first();
         if (!workspace) return res.status(404).json({ message: "Workspace not found", code: "not_found" });
+
+        // Instant fallback: If user was just redirected with ?session_id=, verify with Stripe immediately
+        // so the frontend never has to wait for background webhook latency.
+        const sessionId = req.query.session_id;
+        const stripe = getStripeClient();
+        if (sessionId && stripe && workspace.plan === "free" && !sessionId.startsWith("mock_")) {
+            try {
+                const sessionData = await stripe.checkout.sessions.retrieve(sessionId);
+                if (sessionData && sessionData.payment_status === "paid" && sessionData.metadata?.workspaceId === workspace.id) {
+                    const targetPlan = (sessionData.metadata?.planTier || "pro").toLowerCase();
+                    const interval = (sessionData.metadata?.interval || "monthly").toLowerCase();
+                    const planConfig = PLANS[targetPlan] || PLANS.pro;
+                    await orm().Workspace.where({ id: workspace.id }).update({
+                        plan: planConfig.id,
+                        billingInterval: interval,
+                        subscriptionStatus: "active",
+                        billingCustomerId: sessionData.customer,
+                        subscriptionId: sessionData.subscription,
+                        monthlyOrderLimit: planConfig.limits.monthlyOrders,
+                        cancelAtPeriodEnd: false,
+                    });
+                    workspace = await orm().Workspace.where({ id: workspaceId }).first();
+                }
+            } catch (err) {
+                console.warn("[billing] Instant session sync failed, webhook will handle it:", err.message);
+            }
+        }
 
         const overview = getBillingOverview(workspace);
         return res.status(200).json({ data: overview });

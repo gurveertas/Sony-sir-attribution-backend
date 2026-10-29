@@ -312,11 +312,45 @@ async function handleUpgrade(tier, interval) {
   window.location.href = res.data.checkoutUrl;
 }
 ```
-*Note:* After successful payment, Stripe automatically redirects the user back to `/billing?session_id={CHECKOUT_SESSION_ID}&upgraded=true`.
+
+### D. Return from Stripe & How Frontend Knows the Plan Changed
+When payment succeeds on Stripe, Stripe automatically redirects the customer back to your frontend:
+```
+https://<frontend-url>/settings/billing?session_id={CHECKOUT_SESSION_ID}&success=true
+```
+
+To know which plan was bought and update the UI, the frontend simply does this on page load when `session_id` is present in the URL:
+
+```javascript
+// On the /settings/billing or /billing page load:
+const urlParams = new URLSearchParams(window.location.search);
+const sessionId = urlParams.get('session_id');
+const isSuccess = urlParams.get('success');
+
+if (sessionId && isSuccess) {
+  // 1. Pass the session_id to get the fresh billing overview
+  const res = await api.get(`/api/workspace/billing?session_id=${sessionId}`);
+  const { current, plans } = res.data.data;
+  
+  console.log("Current Plan:", current.plan);         // "pro" or "ultra"
+  console.log("Plan Name:", current.planName);        // "Pro Plan" or "Ultra Plan"
+  console.log("Billing Interval:", current.billingInterval); // "monthly" or "annually"
+  console.log("Order Limit:", current.limits.monthlyOrders);
+
+  // 2. Also refresh the global auth state so navbars and badges update:
+  const authRes = await api.get('/api/auth/me');
+  setWorkspace(authRes.data.workspace);
+
+  // 3. Show celebration toast/banner to user:
+  toast.success(`You have successfully upgraded to ${current.planName}!`);
+}
+```
+
+> **Instant Sync Guarantee:** Even if the background webhook takes a moment over the internet, passing `?session_id=` to `GET /api/workspace/billing?session_id={sessionId}` causes the backend to immediately verify with Stripe on the spot and upgrade the workspace in the database synchronously. The frontend will never be left waiting!
 
 ---
 
-### C. Open Stripe Customer Portal
+### E. Open Stripe Customer Portal
 Called when an existing paying customer clicks "Manage Subscription", "Update Payment Method", or "View Billing Invoices".
 
 - **Endpoint**: `POST /api/workspace/billing/portal`

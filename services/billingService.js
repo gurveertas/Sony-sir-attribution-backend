@@ -7,11 +7,25 @@
  *   - Workspace subscription and usage aggregation
  */
 
+import Stripe from "stripe";
 import ENV from "../utils/env.js";
 import { PLANS, PLAN_TIERS, BILLING_INTERVALS } from "../config/plans.js";
 import { formatWorkspaceSubscription } from "./planService.js";
 
 const STRIPE_API_BASE = "https://api.stripe.com/v1";
+
+let cachedStripeClient = null;
+
+/**
+ * Returns an instantiated Stripe SDK client using the configured secret key.
+ */
+export function getStripeClient(apiKey = ENV.STRIPE_SECRET_KEY) {
+    if (!apiKey) return null;
+    if (!cachedStripeClient || cachedStripeClient._apiKey !== apiKey) {
+        cachedStripeClient = new Stripe(apiKey);
+    }
+    return cachedStripeClient;
+}
 
 /**
  * Maps plan tier and interval to configured Stripe Price IDs.
@@ -64,7 +78,8 @@ export async function createCheckoutSession({
     interval = BILLING_INTERVALS.MONTHLY,
     successUrl,
     cancelUrl,
-    fetchImpl = globalThis.fetch,
+    stripeClient,
+    fetchImpl,
 }) {
     const tier = String(planTier).toLowerCase();
     const validInterval = interval === BILLING_INTERVALS.ANNUALLY ? BILLING_INTERVALS.ANNUALLY : BILLING_INTERVALS.MONTHLY;
@@ -79,7 +94,7 @@ export async function createCheckoutSession({
     const priceId = resolvePriceId(tier, validInterval);
 
     // If Stripe secret key is not set (e.g. local development / tests without Stripe keys)
-    if (!ENV.STRIPE_SECRET_KEY) {
+    if (!ENV.STRIPE_SECRET_KEY && !stripeClient && !fetchImpl) {
         return {
             mock: true,
             sessionId: `mock_cs_${workspace.id}_${tier}_${validInterval}`,
@@ -90,7 +105,7 @@ export async function createCheckoutSession({
         };
     }
 
-    const params = {
+    const sessionParams = {
         mode: "subscription",
         success_url: successUrl || `${ENV.FRONTEND_URL}/settings/billing?session_id={CHECKOUT_SESSION_ID}&success=true`,
         cancel_url: cancelUrl || `${ENV.FRONTEND_URL}/settings/billing?canceled=true`,
@@ -110,17 +125,17 @@ export async function createCheckoutSession({
     };
 
     if (workspace.billingCustomerId) {
-        params.customer = workspace.billingCustomerId;
+        sessionParams.customer = workspace.billingCustomerId;
     } else if (user?.email) {
-        params.customer_email = user.email;
+        sessionParams.customer_email = user.email;
     }
 
     if (priceId) {
-        params.line_items = [{ price: priceId, quantity: 1 }];
+        sessionParams.line_items = [{ price: priceId, quantity: 1 }];
     } else {
         // Fallback to inline price_data when Stripe dashboard price IDs are not yet registered in .env
         const amountCents = plan.pricing[validInterval] * 100;
-        params.line_items = [
+        sessionParams.line_items = [
             {
                 price_data: {
                     currency: (plan.pricing.currency || "USD").toLowerCase(),
@@ -138,25 +153,38 @@ export async function createCheckoutSession({
         ];
     }
 
-    const response = await fetchImpl(`${STRIPE_API_BASE}/checkout/sessions`, {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${ENV.STRIPE_SECRET_KEY}`,
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: serializeStripeParams(params),
-    });
+    if (fetchImpl) {
+        const response = await fetchImpl(`${STRIPE_API_BASE}/checkout/sessions`, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${ENV.STRIPE_SECRET_KEY}`,
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: serializeStripeParams(sessionParams),
+        });
 
-    const body = await response.json();
-    if (!response.ok) {
-        const error = new Error(body?.error?.message || "Failed to create Stripe Checkout Session");
-        error.statusCode = response.status;
-        throw error;
+        const body = await response.json();
+        if (!response.ok) {
+            const error = new Error(body?.error?.message || "Failed to create Stripe Checkout Session");
+            error.statusCode = response.status;
+            throw error;
+        }
+
+        return {
+            sessionId: body.id,
+            checkoutUrl: body.url,
+            plan: tier,
+            interval: validInterval,
+        };
     }
 
+    // Official Stripe SDK execution:
+    const stripe = stripeClient || getStripeClient();
+    const session = await stripe.checkout.sessions.create(sessionParams);
+
     return {
-        sessionId: body.id,
-        checkoutUrl: body.url,
+        sessionId: session.id,
+        checkoutUrl: session.url,
         plan: tier,
         interval: validInterval,
     };
@@ -168,7 +196,8 @@ export async function createCheckoutSession({
 export async function createCustomerPortalSession({
     workspace,
     returnUrl,
-    fetchImpl = globalThis.fetch,
+    stripeClient,
+    fetchImpl,
 }) {
     if (!workspace.billingCustomerId) {
         const error = new Error("No billing customer profile found for this workspace. Please subscribe to a plan first.");
@@ -176,36 +205,46 @@ export async function createCustomerPortalSession({
         throw error;
     }
 
-    if (!ENV.STRIPE_SECRET_KEY) {
+    if (!ENV.STRIPE_SECRET_KEY && !stripeClient && !fetchImpl) {
         return {
             mock: true,
             portalUrl: returnUrl || `${ENV.FRONTEND_URL}/settings/billing`,
         };
     }
 
-    const params = {
+    const portalParams = {
         customer: workspace.billingCustomerId,
         return_url: returnUrl || `${ENV.FRONTEND_URL}/settings/billing`,
     };
 
-    const response = await fetchImpl(`${STRIPE_API_BASE}/billing_portal/sessions`, {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${ENV.STRIPE_SECRET_KEY}`,
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: serializeStripeParams(params),
-    });
+    if (fetchImpl) {
+        const response = await fetchImpl(`${STRIPE_API_BASE}/billing_portal/sessions`, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${ENV.STRIPE_SECRET_KEY}`,
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: serializeStripeParams(portalParams),
+        });
 
-    const body = await response.json();
-    if (!response.ok) {
-        const error = new Error(body?.error?.message || "Failed to create Customer Portal session");
-        error.statusCode = response.status;
-        throw error;
+        const body = await response.json();
+        if (!response.ok) {
+            const error = new Error(body?.error?.message || "Failed to create Customer Portal session");
+            error.statusCode = response.status;
+            throw error;
+        }
+
+        return {
+            portalUrl: body.url,
+        };
     }
 
+    // Official Stripe SDK execution:
+    const stripe = stripeClient || getStripeClient();
+    const portal = await stripe.billingPortal.sessions.create(portalParams);
+
     return {
-        portalUrl: body.url,
+        portalUrl: portal.url,
     };
 }
 

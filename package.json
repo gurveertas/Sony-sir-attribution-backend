@@ -27,7 +27,8 @@
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^10.2.1",
     "pg": "8.22.0",
-    "prisma": "^8.0.0-rc.21"
+    "prisma": "^8.0.0-rc.21",
+    "stripe": "^23.0.1"
   },
   "devDependencies": {
     "@prisma/cli-engine": "^0.6.3",
