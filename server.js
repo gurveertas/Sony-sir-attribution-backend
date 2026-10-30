@@ -116,6 +116,8 @@ app.use(errorHandler);
 // ── Server Start & Graceful Shutdown ───────────────────────────────────────
 const server = app.listen(ENV.PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${ENV.PORT}`);
+    const stripeActive = Boolean(process.env.STRIPE_SECRET_KEY || ENV.STRIPE_SECRET_KEY);
+    console.log(`[billing] Stripe integration: ${stripeActive ? "LIVE (Stripe SDK active)" : "MOCK (No STRIPE_SECRET_KEY found in env)"}`);
 });
 
 if (!ENV.DISABLE_BACKGROUND_WORKERS) startWorkers();
