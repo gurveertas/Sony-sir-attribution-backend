@@ -27,7 +27,8 @@ const orm = () => db.orm.public;
 export const getAvailablePlans = async (req, res) => {
     try {
         let workspaceId;
-        if(user.role === "company_admin"){
+        const userRole = req.user.role;
+        if(userRole === "company_admin"){
             workspaceId = req.user?.workspaceId;
         }
         else{
