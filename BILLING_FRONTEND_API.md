@@ -472,3 +472,91 @@ Returned on endpoints strictly requiring at least Pro or Ultra tier.
 - [ ] **Model Selector Filtering**: In attribution report dropdowns, disable or badge models that require upgrade (e.g. badge `Position-Based` and `Time-Decay` with "Pro", and `Data-Driven` with "Ultra").
 - [ ] **Global Error Interceptor**: Intercept `403` responses where `code` is `plan_limit_reached`, `model_upgrade_required`, or `feature_upgrade_required` to pop up the upgrade modal.
 
+---
+
+## 6. Platform Admin Plan Management
+
+Platform administrators can change the plan tier or revoke paid plans for any workspace directly from the admin console.
+
+### 1. Set Workspace Plan
+Manually upgrade, downgrade, or grant a specific plan tier (Free / Pro / Ultra). Automatically synchronizes order limits and subscription status. If downgrading to Free, any active Stripe subscription is automatically cancelled.
+
+- **Endpoint**: `PATCH /api/platform-admin/workspaces/:workspaceId/plan`
+- **Auth**: Authenticated `platform_admin` session required
+
+#### Request Body:
+```json
+{
+  "plan": "pro",
+  "billingInterval": "monthly",
+  "reason": "Contract agreement upgrade",
+  "cancelStripeSubscription": false
+}
+```
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `plan` | `string` | **Yes** | Target plan tier: `"free"`, `"pro"`, or `"ultra"`. |
+| `billingInterval` | `string` | No | `"monthly"` or `"annually"` (defaults to workspace current or `"monthly"`). |
+| `reason` | `string` | No | Reason recorded in the platform audit log. |
+| `cancelStripeSubscription` | `boolean` | No | If changing to `"free"`, active Stripe subscription is always cancelled. Set to `true` to force cancel even when changing tiers. |
+
+#### Response `200 OK`:
+```json
+{
+  "message": "Workspace plan updated to Pro.",
+  "data": {
+    "id": "ws_123",
+    "name": "Acme Marketing",
+    "plan": "pro",
+    "monthlyOrderLimit": 15000,
+    "billingInterval": "monthly",
+    "subscriptionStatus": "active",
+    "cancelAtPeriodEnd": false
+  }
+}
+```
+
+---
+
+### 2. Revoke Workspace Plan
+Immediately revokes any paid tier (Pro / Ultra) and reverts the workspace to the default Free tier with free usage limits, cancels any active Stripe subscription, and marks subscription status as `"canceled"`.
+
+- **Endpoint**: `POST /api/platform-admin/workspaces/:workspaceId/plan/revoke`
+- **Auth**: Authenticated `platform_admin` session required
+
+#### Request Body:
+```json
+{
+  "reason": "Payment dispute / TOS violation",
+  "cancelStripeSubscription": true
+}
+```
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `reason` | `string` | No | Reason recorded in the platform audit log. |
+| `cancelStripeSubscription` | `boolean` | No | Defaults to `true`. Cancels active Stripe subscription via SDK. |
+
+#### Response `200 OK`:
+```json
+{
+  "message": "Workspace plan successfully revoked and reverted to Free tier.",
+  "data": {
+    "id": "ws_123",
+    "name": "Acme Marketing",
+    "plan": "free",
+    "monthlyOrderLimit": 1000,
+    "subscriptionStatus": "canceled",
+    "subscriptionId": null
+  }
+}
+```
+
+#### Error Response `400 Bad Request` (already free):
+```json
+{
+  "message": "Workspace is already on the Free tier.",
+  "code": "already_free"
+}
+```
+
+

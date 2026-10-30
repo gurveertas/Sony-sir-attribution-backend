@@ -26,7 +26,7 @@ const orm = () => db.orm.public;
  */
 export const getAvailablePlans = async (req, res) => {
     try {
-        const workspaceId = req.user?.workspaceId;
+        const workspaceId = req.user?.workspaceId || req.query;
         let currentPlan = null;
         if (workspaceId) {
             const workspace = await orm().Workspace.where({ id: workspaceId }).first();

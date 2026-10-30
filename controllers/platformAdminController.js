@@ -3,6 +3,8 @@ import { db } from "../src/prisma/db.js";
 import { writeAudit } from "../services/audit.js";
 import { validateWorkspaceSettings, scheduleRebuildIfNeeded } from "../services/workspaceSettings.js";
 import { workspaceStats } from "./platformToolsController.js";
+import { PLANS, PLAN_TIERS } from "../config/plans.js";
+import { getStripeClient } from "../services/billingService.js";
 
 const orm = (client = db) => client.orm.public;
 const ADMIN_ROLE = "platform_admin";
@@ -470,6 +472,13 @@ export const updateWorkspaceSettings = async (req, res) => {
     const problem = validateWorkspaceSettings(changes);
     if (problem) return res.status(400).json({ message: problem });
 
+    if (changes.plan) {
+      const planConfig = PLANS[changes.plan];
+      if (planConfig) {
+        changes.monthlyOrderLimit = planConfig.limits.monthlyOrders;
+      }
+    }
+
     await orm().Workspace.where({ id: workspace.id }).update(changes);
     await audit(req, "admin.workspace_settings_updated", {
       workspaceId: workspace.id,
@@ -491,6 +500,148 @@ export const updateWorkspaceSettings = async (req, res) => {
     return res.status(500).json({
       message: "Could not update workspace settings.",
     });
+  }
+};
+
+/**
+ * PATCH /workspaces/:workspaceId/plan
+ * Body: { plan: "free" | "pro" | "ultra", billingInterval?: "monthly" | "annually", reason?: string, cancelStripeSubscription?: boolean }
+ */
+export const setWorkspacePlan = async (req, res) => {
+  try {
+    if (!requirePlatformAdmin(req, res)) return;
+
+    const workspace = await getWorkspaceOr404(req.params.workspaceId, res);
+    if (!workspace) return;
+
+    const requestedPlan = String(req.body?.plan ?? req.body?.tier ?? "").toLowerCase().trim();
+    if (!requestedPlan || !["free", "pro", "ultra"].includes(requestedPlan)) {
+      return res.status(400).json({
+        message: "plan is required and must be one of: 'free', 'pro', 'ultra'",
+        code: "validation_error",
+      });
+    }
+
+    const interval = req.body?.billingInterval ? String(req.body.billingInterval).toLowerCase() : (workspace.billingInterval || "monthly");
+    if (!["monthly", "annually"].includes(interval)) {
+      return res.status(400).json({
+        message: "billingInterval must be 'monthly' or 'annually'",
+        code: "validation_error",
+      });
+    }
+
+    const planConfig = PLANS[requestedPlan];
+    const changes = {
+      plan: planConfig.id,
+      monthlyOrderLimit: planConfig.limits.monthlyOrders,
+      billingInterval: interval,
+      subscriptionStatus: "active",
+      cancelAtPeriodEnd: false,
+    };
+
+    // If changing to free or explicitly requested to cancel active Stripe subscription
+    if ((requestedPlan === "free" || req.body?.cancelStripeSubscription) && workspace.subscriptionId) {
+      const stripe = getStripeClient();
+      if (stripe) {
+        try {
+          await stripe.subscriptions.cancel(workspace.subscriptionId);
+        } catch (stripeErr) {
+          console.warn("[platformAdmin] Failed to cancel Stripe subscription:", stripeErr.message);
+        }
+      }
+      changes.subscriptionId = null;
+    }
+
+    await orm().Workspace.where({ id: workspace.id }).update(changes);
+
+    await audit(req, "admin.workspace_plan_changed", {
+      workspaceId: workspace.id,
+      targetType: "workspace",
+      targetId: workspace.id,
+      reason: reasonFrom(req) || req.body?.reason || null,
+      metadata: {
+        previousPlan: workspace.plan || "free",
+        newPlan: planConfig.id,
+        billingInterval: interval,
+        monthlyOrderLimit: planConfig.limits.monthlyOrders,
+      },
+    });
+
+    const updated = await orm().Workspace.where({ id: workspace.id }).first();
+    const { emailVerificationHash: _h, ...safe } = updated ?? {};
+
+    return res.status(200).json({
+      message: `Workspace plan updated to ${planConfig.name}.`,
+      data: safe,
+    });
+  } catch (error) {
+    console.error("setWorkspacePlan error:", error.message);
+    return res.status(500).json({ message: "Could not update workspace plan." });
+  }
+};
+
+/**
+ * POST /workspaces/:workspaceId/plan/revoke
+ * Body: { reason?: string, cancelStripeSubscription?: boolean }
+ */
+export const revokeWorkspacePlan = async (req, res) => {
+  try {
+    if (!requirePlatformAdmin(req, res)) return;
+
+    const workspace = await getWorkspaceOr404(req.params.workspaceId, res);
+    if (!workspace) return;
+
+    if (workspace.plan === "free") {
+      return res.status(400).json({
+        message: "Workspace is already on the Free tier.",
+        code: "already_free",
+      });
+    }
+
+    const freeConfig = PLANS.free;
+    const changes = {
+      plan: freeConfig.id,
+      monthlyOrderLimit: freeConfig.limits.monthlyOrders,
+      subscriptionStatus: "canceled",
+      cancelAtPeriodEnd: false,
+    };
+
+    // By default, cancel active Stripe subscription unless cancelStripeSubscription is false
+    if (req.body?.cancelStripeSubscription !== false && workspace.subscriptionId) {
+      const stripe = getStripeClient();
+      if (stripe) {
+        try {
+          await stripe.subscriptions.cancel(workspace.subscriptionId);
+        } catch (stripeErr) {
+          console.warn("[platformAdmin] Failed to cancel Stripe subscription:", stripeErr.message);
+        }
+      }
+      changes.subscriptionId = null;
+    }
+
+    await orm().Workspace.where({ id: workspace.id }).update(changes);
+
+    await audit(req, "admin.workspace_plan_revoked", {
+      workspaceId: workspace.id,
+      targetType: "workspace",
+      targetId: workspace.id,
+      reason: reasonFrom(req) || req.body?.reason || "Plan revoked by platform admin",
+      metadata: {
+        previousPlan: workspace.plan,
+        revertedPlan: "free",
+      },
+    });
+
+    const updated = await orm().Workspace.where({ id: workspace.id }).first();
+    const { emailVerificationHash: _h, ...safe } = updated ?? {};
+
+    return res.status(200).json({
+      message: "Workspace plan successfully revoked and reverted to Free tier.",
+      data: safe,
+    });
+  } catch (error) {
+    console.error("revokeWorkspacePlan error:", error.message);
+    return res.status(500).json({ message: "Could not revoke workspace plan." });
   }
 };
 

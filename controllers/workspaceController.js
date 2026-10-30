@@ -24,7 +24,7 @@ import { sendCsv, wantsCsv, paginate, sortDesc } from "../services/http.js";
 import ENV from "../utils/env.js";
 import { requestRebuild } from "../services/rollups.js";
 import { frontendBase } from "../utils/frontendUrl.js";
-import { getWorkspacePlan } from "../services/planService.js";
+import { getWorkspacePlan, isModelAllowedForWorkspace } from "../services/planService.js";
 
 const orm = () => db.orm.public;
 
@@ -109,6 +109,35 @@ export const updateWorkspaceSettings = async (req, res) => {
         const problem = validateWorkspaceSettings(changes);
         if (problem) return res.status(400).json({ message: problem, code: "validation_error" });
 
+        const plan = getWorkspacePlan(workspace);
+
+        if (changes.defaultModel && !isModelAllowedForWorkspace(workspace, changes.defaultModel)) {
+            const requiredTier = changes.defaultModel === "data_driven" ? "ultra" : "pro";
+            return res.status(403).json({
+                message: `The '${changes.defaultModel}' attribution model is not available on the ${plan.name}. Upgrade to ${requiredTier.toUpperCase()} to use this model as default.`,
+                code: "model_upgrade_required",
+                requiredPlan: requiredTier,
+            });
+        }
+
+        if (changes.lookbackOverrides && !plan.features.customLookback) {
+            return res.status(403).json({
+                message: `Per-channel custom lookback windows are not available on the ${plan.name}. Upgrade to PRO or ULTRA to enable custom lookback.`,
+                code: "feature_upgrade_required",
+                feature: "customLookback",
+                requiredPlan: "pro",
+            });
+        }
+
+        if (changes.rawRetentionMonths && changes.rawRetentionMonths > plan.limits.retentionMonths) {
+            return res.status(403).json({
+                message: `Your current plan (${plan.name}) allows up to ${plan.limits.retentionMonths} months of raw data retention. Upgrade to extend retention.`,
+                code: "plan_limit_reached",
+                limit: "retentionMonths",
+                max: plan.limits.retentionMonths,
+            });
+        }
+
         await db.transaction(async (tx) => {
             await tx.orm.public.Workspace.where({ id: workspaceId }).update(changes);
             await writeAudit(tx.orm.public, {
@@ -163,20 +192,6 @@ export const inviteUser = async (req, res) => {
             return res.status(400).json({ message: "role must be company_admin or company_viewer" });
         }
 
-        const workspace = await orm().Workspace.where({ id: workspaceId }).first();
-        const plan = getWorkspacePlan(workspace);
-        const members = await orm().User.where({ workspaceId }).all();
-        const pendingInvites = (await orm().Invite.where({ workspaceId }).all()).filter((i) => inviteStatus(i) === "pending");
-        if ((members.length + pendingInvites.length) >= plan.limits.teamMembers) {
-            return res.status(403).json({
-                message: `Your current plan (${plan.name}) allows up to ${plan.limits.teamMembers} team members. Please upgrade your plan to invite more users.`,
-                code: "plan_limit_reached",
-                limit: "teamMembers",
-                current: members.length + pendingInvites.length,
-                max: plan.limits.teamMembers,
-            });
-        }
-
         const normalizedEmail = email.trim().toLowerCase();
 
         // Check if already a user
@@ -189,6 +204,20 @@ export const inviteUser = async (req, res) => {
         const open = (await orm().Invite.where({ workspaceId, email: normalizedEmail }).all()).find((i) => inviteStatus(i) === "pending");
         if (open) {
             return res.status(409).json({ message: "A pending invite already exists for this email. Resend it from the Team page.", code: "invite_exists", inviteId: open.id });
+        }
+
+        const workspace = await orm().Workspace.where({ id: workspaceId }).first();
+        const plan = getWorkspacePlan(workspace);
+        const members = await orm().User.where({ workspaceId }).all();
+        const pendingInvites = (await orm().Invite.where({ workspaceId }).all()).filter((i) => inviteStatus(i) === "pending");
+        if ((members.length + pendingInvites.length) >= plan.limits.teamMembers) {
+            return res.status(403).json({
+                message: `Your current plan (${plan.name}) allows up to ${plan.limits.teamMembers} team members. Please upgrade your plan to invite more users.`,
+                code: "plan_limit_reached",
+                limit: "teamMembers",
+                current: members.length + pendingInvites.length,
+                max: plan.limits.teamMembers,
+            });
         }
 
         const rawToken = crypto.randomBytes(32).toString("hex");

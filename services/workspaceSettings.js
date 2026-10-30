@@ -59,6 +59,11 @@ export function validateWorkspaceSettings(changes) {
         changes.rawRetentionMonths = m;
     }
     if ("taxIncludedInRevenue" in changes && typeof changes.taxIncludedInRevenue !== "boolean") return "taxIncludedInRevenue must be true or false";
+    if ("plan" in changes) {
+        const p = String(changes.plan).toLowerCase();
+        if (!["free", "pro", "ultra"].includes(p)) return "plan must be one of: free, pro, ultra";
+        changes.plan = p;
+    }
     if ("websiteUrl" in changes && changes.websiteUrl !== null) {
         try {
             const u = new URL(String(changes.websiteUrl));

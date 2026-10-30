@@ -14,6 +14,8 @@ import {
   listPlatformWebhooks,
   updatePlatformWebhook,
   deleteUser,
+  setWorkspacePlan,
+  revokeWorkspacePlan,
 } from "../controllers/platformAdminController.js";
 import { getWorkspaceDashboard } from "../controllers/platformAdminDashboardController.js";
 import * as tools from "../controllers/platformToolsController.js";
@@ -50,6 +52,8 @@ router.get("/workspaces/:workspaceId", getWorkspaceDetails);
 router.get("/workspaces/:workspaceId/dashboard", getWorkspaceDashboard);
 router.patch("/workspaces/:workspaceId/status", setWorkspaceStatus);
 router.patch("/workspaces/:workspaceId/settings", updateWorkspaceSettings);
+router.patch("/workspaces/:workspaceId/plan", setWorkspacePlan);
+router.post("/workspaces/:workspaceId/plan/revoke", revokeWorkspacePlan);
 router.get("/workspaces/:workspaceId/users", listWorkspaceUsers);
 
 router.patch("/users/:userId", updateUser);
