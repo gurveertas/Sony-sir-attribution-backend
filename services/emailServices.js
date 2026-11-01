@@ -24,7 +24,7 @@ function getTransporter() {
 export async function sendEmail({ to, subject, html }) {
   try {
     return await getTransporter().sendMail({
-      from: ENV.SMTP_USER,
+      from: ENV.EMAIL_FROM || ENV.SMTP_USER,
       to,
       subject,
       html,

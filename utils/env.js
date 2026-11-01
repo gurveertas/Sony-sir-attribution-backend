@@ -28,9 +28,6 @@ const ENV = {
     EMAIL_FROM : process.env.EMAIL_FROM,
     SMTP_USER: process.env.SMTP_USER,
     SMTP_PASS: process.env.SMTP_PASS,
-    SMTP_SECURE: process.env.SMTP_SECURE === undefined
-        ? undefined
-        : String(process.env.SMTP_SECURE).toLowerCase() === "true",
     NODE_ENV: process.env.NODE_ENV,
     // Dedicated key for encrypting stored secrets (gateway credentials, webhook secrets).
     // Optional for backward compatibility: when unset, JWT_SECRET is used (legacy behaviour).
