@@ -45,7 +45,6 @@ export const getAvailablePlans = async (req, res) => {
             pricing: p.pricing,
             limits: p.limits,
             features: p.features,
-            availableModels: [...p.features.models],
             isCurrent: currentPlan ? p.id === currentPlan : false,
         }));
         return res.status(200).json({ data: plans });

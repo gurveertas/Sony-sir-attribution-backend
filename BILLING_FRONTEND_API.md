@@ -44,6 +44,7 @@ Called on app initialization to read the user session and workspace status.
     "name": "Acme Marketing",
     "status": "active",
     "plan": "pro",
+    "availableModels": ["first_touch", "last_touch", "last_non_direct", "linear", "position_based", "time_decay"],
     "subscriptionStatus": "active",
     "billingInterval": "monthly",
     "trialEndsAt": null,
@@ -169,8 +170,6 @@ Use this to populate the **Billing & Subscription** settings page, plan cards, u
 - **Endpoint**: `GET /api/workspace/billing`
 - **Allowed Roles**: `company_admin`, `company_viewer`
 
-The response's `current.availableModels` (and each plan's `availableModels`) contains the plan's selectable attribution model IDs. The dashboard endpoint also returns this list at the top level as `availableModels`, so the model switcher can use the current workspace's plan without requesting the full plan catalog.
-
 #### Response `200 OK`
 ```json
 {
@@ -197,7 +196,6 @@ The response's `current.availableModels` (and each plan's `availableModels`) con
       "prioritySupport": false,
       "customLookback": false
     },
-    "availableModels": ["first_touch", "last_touch", "last_non_direct", "linear"],
     "usage": {
       "ordersUsed": 340,
       "orderLimit": 1000,
@@ -227,8 +225,7 @@ The response's `current.availableModels` (and each plan's `availableModels`) con
         "apiAccess": false,
         "prioritySupport": false,
         "customLookback": false
-      },
-      "availableModels": ["first_touch", "last_touch", "last_non_direct", "linear"]
+      }
     },
     {
       "tier": "pro",
@@ -469,7 +466,6 @@ Returned on endpoints strictly requiring at least Pro or Ultra tier.
 ## 5. Frontend Implementation Checklist
 
 - [ ] **Plan Badges**: In navigation / header, display the current plan (`Free`, `Pro`, `Ultra`) using `workspace.plan` from `/api/auth/me`.
-- [ ] **Usage Progress Bar**: On dashboard or settings, show orders used vs limit (`usage.ordersUsed / usage.orderLimit`) from `GET /api/workspace/billing`.
 - [ ] **Pricing Page / Modal**: Render the 3 tiers with a toggle between `Monthly` and `Annually`.
 - [ ] **Checkout Redirect**: Connect "Upgrade" buttons to `POST /api/workspace/billing/checkout` and forward to `checkoutUrl`.
 - [ ] **Manage Portal Button**: Show "Manage Subscription / Invoices" for paying customers, connecting to `POST /api/workspace/billing/portal`.

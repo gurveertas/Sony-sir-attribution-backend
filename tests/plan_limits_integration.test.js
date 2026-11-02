@@ -137,4 +137,5 @@ test("sendMe includes subscription and plan fields in workspace payload", async 
     assert.equal(res.body.workspace.subscriptionStatus, "active");
     assert.equal(res.body.workspace.billingInterval, "monthly");
     assert.equal(res.body.workspace.currentPeriodEndsAt, "2026-11-29T00:00:00.000Z");
+    assert.deepEqual(res.body.workspace.availableModels, ["first_touch", "last_touch", "last_non_direct", "linear", "position_based", "time_decay"]);
 });

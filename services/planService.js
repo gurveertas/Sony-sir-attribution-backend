@@ -46,7 +46,6 @@ export function formatWorkspaceSubscription(workspace) {
         trialEndsAt: workspace.trialEndsAt ?? null,
         limits: plan.limits,
         features: plan.features,
-        availableModels: [...plan.features.models],
         usage: {
             ordersUsed,
             orderLimit,

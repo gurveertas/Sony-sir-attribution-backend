@@ -30,6 +30,7 @@ import { encryptSecret, decryptSecret } from "../utils/crypto.js";
 import { generateSecret, verifyTotp, otpauthUrl } from "../utils/totp.js";
 import { platformAdmin2faRequired } from "../middlewares/protectRoute.js";
 import { frontendBase } from "../utils/frontendUrl.js";
+import { getWorkspacePlan } from "../services/planService.js";
 
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_FAILED_LOGINS = 5;
@@ -382,6 +383,7 @@ export const sendMe = async (req, res) => {
                 defaultModel: w.defaultModel,
                 weekStart: w.weekStart,
                 plan: w.plan || "free",
+                availableModels: [...getWorkspacePlan(w).features.models],
                 subscriptionStatus: w.subscriptionStatus || "active",
                 billingInterval: w.billingInterval || null,
                 trialEndsAt: w.trialEndsAt || null,
