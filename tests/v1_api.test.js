@@ -95,8 +95,9 @@ test("READ with a dashboard session still works with role checks (cookie path un
 
 test("dashboard overview accepts a secret key (workspace comes from the key, not 'Workspace id required')", async () => {
     const res = await get("/v1/reports/dashboard?from=2026-03-01&to=2026-03-02", bearer(KEYS.secret1));
-    assert.notEqual(res.status, 401, await res.clone().text());
-    assert.notEqual(res.status, 403);
+    assert.equal(res.status, 200, await res.clone().text());
+    const body = await res.json();
+    assert.deepEqual(body.availableModels, ["first_touch", "last_touch", "last_non_direct", "linear"]);
 });
 
 test("REFUNDS and record edits require a SECRET key; a publishable key is rejected even from an allowed origin", async () => {

@@ -260,6 +260,7 @@ export function getBillingOverview(workspace) {
         pricing: p.pricing,
         limits: p.limits,
         features: p.features,
+        availableModels: [...p.features.models],
         isCurrent: p.id === current.plan,
     }));
 
@@ -268,4 +269,3 @@ export function getBillingOverview(workspace) {
         plans: availablePlans,
     };
 }
-

@@ -49,6 +49,7 @@ import { sendError, wantsCsv, sendCsv } from "../services/http.js";
 import { formatMinor } from "../utils/money.js";
 import { localDateString } from "../utils/timezone.js";
 import { latestRateDate } from "../services/fx.js";
+import { getWorkspacePlan } from "../services/planService.js";
 
 const DAY_MS = 86_400_000;
 const PAID_CHANNELS = new Set(["google", "meta", "tiktok", "bing", "linkedin", "snapchat", "paid_other", "affiliate"]);
@@ -678,6 +679,13 @@ function money(minor, currency) {
  * top campaigns, top locations, attribution coverage by match method, alerts.
  */
 export const getDashboardOverview = report("dashboard", async (req, params, workspaceId) => {
+    const workspace = await db.orm.public.Workspace.where({ id: workspaceId }).first();
+    if (!workspace) {
+        const error = new Error("Workspace not found");
+        error.statusCode = 404;
+        throw error;
+    }
+    const availableModels = [...getWorkspacePlan(workspace).features.models];
     const { facts, current, previous, changes } = await buildSummary(params, workspaceId);
     const cur = params.currency;
     const lines = creditLines(facts, params.model);
@@ -716,6 +724,7 @@ export const getDashboardOverview = report("dashboard", async (req, params, work
 
     return {
         ...meta(params),
+        availableModels,
         summary: current,
         previous,
         changes,

@@ -169,6 +169,8 @@ Use this to populate the **Billing & Subscription** settings page, plan cards, u
 - **Endpoint**: `GET /api/workspace/billing`
 - **Allowed Roles**: `company_admin`, `company_viewer`
 
+The response's `current.availableModels` (and each plan's `availableModels`) contains the plan's selectable attribution model IDs. The dashboard endpoint also returns this list at the top level as `availableModels`, so the model switcher can use the current workspace's plan without requesting the full plan catalog.
+
 #### Response `200 OK`
 ```json
 {
@@ -195,6 +197,7 @@ Use this to populate the **Billing & Subscription** settings page, plan cards, u
       "prioritySupport": false,
       "customLookback": false
     },
+    "availableModels": ["first_touch", "last_touch", "last_non_direct", "linear"],
     "usage": {
       "ordersUsed": 340,
       "orderLimit": 1000,
@@ -224,7 +227,8 @@ Use this to populate the **Billing & Subscription** settings page, plan cards, u
         "apiAccess": false,
         "prioritySupport": false,
         "customLookback": false
-      }
+      },
+      "availableModels": ["first_touch", "last_touch", "last_non_direct", "linear"]
     },
     {
       "tier": "pro",
@@ -558,5 +562,3 @@ Immediately revokes any paid tier (Pro / Ultra) and reverts the workspace to the
   "code": "already_free"
 }
 ```
-
-

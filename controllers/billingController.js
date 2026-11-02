@@ -6,7 +6,6 @@
  *   - POST /api/workspace/billing/checkout Create Stripe Checkout Session for Pro / Ultra
  *   - POST /api/workspace/billing/portal   Create Stripe Customer Portal session
  */
-
 import { db } from "../src/prisma/db.js";
 import { sendError } from "../services/http.js";
 import { PLANS } from "../config/plans.js";
@@ -27,7 +26,7 @@ const orm = () => db.orm.public;
 export const getAvailablePlans = async (req, res) => {
     try {
         let workspaceId;
-        const userRole = req.user.role;
+        const userRole = req.user?.role;
         if(userRole === "company_admin"){
             workspaceId = req.user?.workspaceId;
         }
@@ -46,6 +45,7 @@ export const getAvailablePlans = async (req, res) => {
             pricing: p.pricing,
             limits: p.limits,
             features: p.features,
+            availableModels: [...p.features.models],
             isCurrent: currentPlan ? p.id === currentPlan : false,
         }));
         return res.status(200).json({ data: plans });
@@ -166,4 +166,3 @@ export const openCustomerPortal = async (req, res) => {
         return sendError(res, error, "openCustomerPortal");
     }
 };
-

@@ -61,6 +61,8 @@ test("getBillingOverview aggregates current workspace status and plan catalog", 
     const proPlan = overview.plans.find((p) => p.id === "pro");
     assert.equal(proPlan.isCurrent, true);
     assert.equal(proPlan.pricing.monthly, PLANS.pro.pricing.monthly);
+    assert.deepEqual(overview.current.availableModels, PLANS.pro.features.models);
+    assert.deepEqual(proPlan.availableModels, PLANS.pro.features.models);
 });
 
 test("createCheckoutSession validates plan tier and creates checkout session", async () => {
@@ -151,5 +153,6 @@ test("getAvailablePlans returns catalog of free, pro, and ultra plans", async ()
     assert.ok(tiers.includes("free"));
     assert.ok(tiers.includes("pro"));
     assert.ok(tiers.includes("ultra"));
+    const freePlan = res.body.data.find((p) => p.id === "free");
+    assert.deepEqual(freePlan.availableModels, PLANS.free.features.models);
 });
-
