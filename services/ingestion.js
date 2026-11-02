@@ -441,9 +441,8 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
         externalId: input.customerExternalId,
         externalIdKey: input.customerExternalIdKey || ctx.connectorType || "default",
     });
-    // Payment webhooks often contain only the checkout token (gateway payloads do not
-    // consistently include the buyer's email/phone). The SDK's identify call links the
-    // checkout session's visitor to a Customer, so carry that identity onto the order.
+    // Payment webhooks may identify the customer through contact details or through the
+    // checkout visitor previously linked by identify.
     const checkoutSession = input.checkoutToken
         ? await t.CheckoutSession.where({ token: input.checkoutToken }).first().catch(() => null)
         : null;
@@ -464,6 +463,12 @@ export async function ingestOrder(workspaceId, body, ctx = {}) {
         : null;
     const finalCustomer = customer ?? sessionCustomer ?? visitorCustomer ?? bookingCustomer;
     if (input.visitorId && finalCustomer) await linkVisitorToCustomer(client, workspaceId, input.visitorId, finalCustomer.id);
+    if (sessionVisitor && !sessionVisitor.customerId && finalCustomer) {
+        await t.Visitor.where({ id: sessionVisitor.id }).update({
+            customerId: finalCustomer.id,
+            lastSeenAt: new Date().toISOString(),
+        });
+    }
     if (!hasCampaignTouch && finalCustomer) {
         await persistOrderCampaignTouch(client, workspaceId, input, Boolean(ctx.isTest), finalCustomer.id);
     }

@@ -141,6 +141,47 @@ test("Stripe metadata visitor and UTM source reach the customer's firstSource", 
     assert.equal(res.body.data[0].firstSource, "email");
 });
 
+test("Razorpay payment contact links checkout visitor to customer without identify", async () => {
+    const sdkVisitorId = "razorpay-visitor";
+    const visitorId = await visitor(sdkVisitorId);
+    const google = await touch(visitorId, "2026-10-27T04:00:00Z", {
+        source: "google",
+        medium: "cpc",
+        channel: "google",
+    });
+    const checkoutToken = await token(visitorId, [google]);
+
+    await processConnectorEvent({
+        connector: { id: "razorpay-connector", workspaceId: WS, type: "razorpay" },
+        eventType: "payment.captured",
+        payload: {
+            event: "payment.captured",
+            payload: {
+                payment: {
+                    entity: {
+                        id: "pay_razorpay_identity",
+                        created_at: 1_793_091_508,
+                        currency: "inr",
+                        amount: 14900,
+                        email: "razorpay-customer@example.com",
+                        contact: "+14155552671",
+                        notes: { attribution_token: checkoutToken },
+                    },
+                },
+            },
+        },
+    });
+
+    const order = T.Order.find((item) => item.externalId === "pay_razorpay_identity");
+    assert.ok(order?.customerId);
+    assert.equal(order.matchMethod, "token");
+    assert.equal(T.Visitor.find((item) => item.id === visitorId).customerId, order.customerId);
+
+    const res = makeRes();
+    await customers.listCustomers({ query: {}, workspaceId: WS, user: { role: "company_admin" } }, res);
+    assert.equal(res.body.data[0].firstSource, "google");
+});
+
 // ── 3 ───────────────────────────────────────────────────────────────────────
 test("3. A refund reduces net revenue on ITS date, is linked to the original order, and reduces channel revenue by the order's shares", async () => {
     const v = await visitor("v-3");

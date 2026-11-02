@@ -433,6 +433,8 @@ Possible errors: `400 invalid_credentials` (gateway rejected the credentials), `
 
 > **Stripe Checkout tip:** put the token on the PaymentIntent too (`payment_intent_data.metadata`). Stripe may deliver `payment_intent.succeeded` before `checkout.session.completed`; the first event creates the order, so the token must be present on that first event.
 
+For Razorpay, `/v1/identify` is optional if you only need to identify the customer after payment. Razorpay Checkout collects the buyer's email/phone; the verified `payment.captured` webhook supplies those values and the attribution token. The backend creates or matches the customer from the payment contact details and links the checkout visitor to that customer. Keep `/v1/identify` if the visitor must be identified before payment, such as for abandoned-checkout reporting.
+
 ### 8.3 Events handled
 
 | Gateway | Orders | Refunds |
