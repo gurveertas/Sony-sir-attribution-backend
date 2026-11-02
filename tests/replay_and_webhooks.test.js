@@ -3,6 +3,7 @@ import test, { mock } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { createFakeDb, makeRes, adminReq } from "./fakeDb.js";
+import ENV from "../utils/env.js";
 
 const fake = createFakeDb();
 mock.module("../src/prisma/db.js", { namedExports: { db: fake.db }, defaultExport: fake.db });
@@ -248,6 +249,46 @@ test("razorpay webhook: HMAC verified with the stored secret", async () => {
     res = makeRes();
     await hooks.razorpayWebhook(webhookReq(c.id, body, { "x-razorpay-signature": "00" + good.slice(2) }), res);
     assert.equal(res.statusCode, 401);
+});
+
+test("Razorpay order.paid webhook is processed inline when background workers are disabled", async () => {
+    reset();
+    const previousSetting = ENV.DISABLE_BACKGROUND_WORKERS;
+    ENV.DISABLE_BACKGROUND_WORKERS = true;
+    try {
+        const c = await seedConnector("razorpay");
+        const body = JSON.stringify({
+            entity: "event",
+            event: "order.paid",
+            payload: {
+                payment: {
+                    entity: {
+                        id: "pay_TvIVdERPZeUQEF",
+                        amount: 900,
+                        currency: "INR",
+                        status: "captured",
+                        email: "customer@example.com",
+                        contact: "+919901500000",
+                        notes: { attribution_token: "df4937c3-118c-4bf5-a4a0-4120036cb4c5" },
+                        created_at: 1793620482,
+                    },
+                },
+            },
+        });
+        const signature = crypto.createHmac("sha256", "whsec").update(body).digest("hex");
+        const res = makeRes();
+
+        await hooks.razorpayWebhook(webhookReq(c.id, body, { "x-razorpay-signature": signature }), res);
+
+        assert.equal(res.statusCode, 200);
+        assert.equal(fake.tables.RawEvent[0].eventType, "order.paid");
+        assert.equal(fake.tables.RawEvent[0].status, "processed");
+        assert.deepEqual(processorCalls[0].payload.payload.payment.entity.notes, {
+            attribution_token: "df4937c3-118c-4bf5-a4a0-4120036cb4c5",
+        });
+    } finally {
+        ENV.DISABLE_BACKGROUND_WORKERS = previousSetting;
+    }
 });
 
 test("events for a SUSPENDED company are acknowledged and ignored (nothing stored, no gateway retry storm)", async () => {

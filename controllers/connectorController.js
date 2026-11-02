@@ -19,6 +19,7 @@ import crypto from "crypto";
 import { getConnectorConfig, getNestedValue, getRawBody, verifyHmacSignature } from "../utils/connectorConfig.js";
 import { lookupConnector, lookupWorkspace } from "../services/connectorRuntime.js";
 import { acceptEvent } from "../services/eventQueue.js";
+import ENV from "../utils/env.js";
 import { GatewayError } from "../services/gateways/http.js";
 import { verifyWebhookSignature as verifyPayPalSignature } from "../services/gateways/paypal.js";
 
@@ -80,7 +81,14 @@ async function resolveConnector(req, res, allowedTypes, wrongTypeMessage) {
 async function ingest({ res, connector, source, eventType, payload, label }) {
     let raw;
     try {
-        raw = await acceptEvent({ workspaceId: connector.workspaceId, connector, source, eventType, payload });
+        raw = await acceptEvent({
+            workspaceId: connector.workspaceId,
+            connector,
+            source,
+            eventType,
+            payload,
+            processInline: ENV.DISABLE_BACKGROUND_WORKERS,
+        });
     } catch (err) {
         console.error(`${label}: could not store event:`, err.message);
         return res.status(503).json({ message: "Temporarily unable to accept events, please retry" });

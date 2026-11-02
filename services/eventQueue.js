@@ -40,7 +40,16 @@ const isPermanent = (err) => {
  * Save a verified event and queue it. Throws when the event could not be stored — the caller must
  * then answer 5xx so the sender retries (an event is never acknowledged before it is stored).
  */
-export async function acceptEvent({ workspaceId, connector = null, source, eventType, payload, isTest = false, idempotencyKey = null }) {
+export async function acceptEvent({
+    workspaceId,
+    connector = null,
+    source,
+    eventType,
+    payload,
+    isTest = false,
+    idempotencyKey = null,
+    processInline = false,
+}) {
     const raw = await orm().RawEvent.create({
         workspaceId,
         connectorId: connector?.id ?? null,
@@ -54,7 +63,11 @@ export async function acceptEvent({ workspaceId, connector = null, source, event
         isTest: Boolean(isTest),
     });
     if (connector) touchLastEvent(connector.id);
-    enqueueJob("event.process", { workspaceId, rawEventId: raw.id });
+    if (processInline) {
+        await processRawEvent(raw.id);
+    } else {
+        enqueueJob("event.process", { workspaceId, rawEventId: raw.id });
+    }
     return raw;
 }
 
