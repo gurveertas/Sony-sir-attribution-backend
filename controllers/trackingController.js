@@ -86,7 +86,7 @@ export const recordTouch = async (req, res) => {
             ga: clip(b.ga, 500),
             ip: null, // not stored: personal data, not needed for deterministic matching
             userAgent: clip(req.headers["user-agent"], 500),
-            isTest: req.apiKey?.mode === "test2",
+            isTest: req.apiKey?.mode === "test",
             touchedAt: new Date(b.touchedAt ?? Date.now()).toISOString(),
         };
 
