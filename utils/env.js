@@ -59,6 +59,7 @@ ENV.IDENTITY_HASH_KEY = process.env.IDENTITY_HASH_KEY || null;
 // asftas.vercel.app (no dash) has no deployment (Vercel answers 404 DEPLOYMENT_NOT_FOUND): never use it.
 ENV.FRONTEND_URL = (process.env.FRONTEND_URL || "https://asf-tas.vercel.app").replace(/\/+$/, "");
 ENV.REQUIRE_WORKSPACE_APPROVAL = String(process.env.REQUIRE_WORKSPACE_APPROVAL ?? "false").toLowerCase() === "true";
+ENV.ALLOW_UNVERIFIED_LIVE_SITES = String(process.env.ALLOW_UNVERIFIED_LIVE_SITES ?? "false").toLowerCase() === "true";
 ENV.META_APP_ID = process.env.META_APP_ID || null;
 ENV.META_APP_SECRET = process.env.META_APP_SECRET || null;
 ENV.GOOGLE_ADS_CLIENT_ID = process.env.GOOGLE_ADS_CLIENT_ID || null;

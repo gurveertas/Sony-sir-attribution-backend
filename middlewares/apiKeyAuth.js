@@ -9,6 +9,7 @@
 import crypto from "crypto";
 import { db } from "../src/prisma/db.js";
 import { rateLimiter } from "./rateLimiter.js";
+import ENV from "../utils/env.js";
 
 const sha256 = (v) => crypto.createHash("sha256").update(v).digest("hex");
 const LAST_USED_INTERVAL_MS = 60_000; // don't write lastUsedAt on every request
@@ -83,7 +84,7 @@ export const apiKeyAuth =
 
             // Live keys stay inactive until a domain is verified (scope 4.1). Test (sandbox) keys work
             // straight away so the setup checklist and test-event tool can be used before going live.
-            if (key.mode === "live") {
+            if (key.mode === "live" && !ENV.ALLOW_UNVERIFIED_LIVE_SITES) {
                 const sites = (await db.orm.public.Site.where({ workspaceId: key.workspaceId }).all()).filter((s) => s.verifiedAt);
                 if (key.siteId && !sites.some((s) => s.id === key.siteId)) {
                     return res.status(403).json({ message: "Site is not verified yet", code: "site_unverified" });
