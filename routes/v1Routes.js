@@ -37,9 +37,9 @@ const secretOnly = apiKeyAuth(["secret"]);
 const write = idempotency();
 
 // ── SDK tracking (publishable key) ─────────────────────────────────────────
-router.post("/touches", pub, write, recordTouch);
-router.post("/identify", pub, write, identifyVisitor);
-router.post("/checkout-sessions", pub, write, createCheckoutSession);
+router.post("/touches", pubOrSecret, write, recordTouch);
+router.post("/identify", pubOrSecret, write, identifyVisitor);
+router.post("/checkout-sessions", pubOrSecret, write, createCheckoutSession);
 
 // ── Conversion ingestion (publishable or secret key) ───────────────────────
 // A publishable key is visible in page source, so anything it posts can be forged by a visitor.

@@ -141,7 +141,7 @@ test("Stripe metadata visitor and UTM source reach the customer's firstSource", 
     assert.equal(res.body.data[0].firstSource, "email");
 });
 
-test("Razorpay payment contact links checkout visitor to customer without identify", async () => {
+test("Razorpay order.paid payment contact links checkout visitor to customer without identify", async () => {
     const sdkVisitorId = "razorpay-visitor";
     const visitorId = await visitor(sdkVisitorId);
     const google = await touch(visitorId, "2026-10-27T04:00:00Z", {
@@ -153,9 +153,11 @@ test("Razorpay payment contact links checkout visitor to customer without identi
 
     await processConnectorEvent({
         connector: { id: "razorpay-connector", workspaceId: WS, type: "razorpay" },
-        eventType: "payment.captured",
+        eventType: "order.paid",
         payload: {
-            event: "payment.captured",
+            entity: "event",
+            event: "order.paid",
+            contains: ["payment", "order"],
             payload: {
                 payment: {
                     entity: {
@@ -166,6 +168,15 @@ test("Razorpay payment contact links checkout visitor to customer without identi
                         email: "razorpay-customer@example.com",
                         contact: "+14155552671",
                         notes: { attribution_token: checkoutToken },
+                    },
+                },
+                order: {
+                    entity: {
+                        id: "order_razorpay_identity",
+                        amount: 14900,
+                        amount_paid: 14900,
+                        currency: "INR",
+                        status: "paid",
                     },
                 },
             },
